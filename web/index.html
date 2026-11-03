@@ -42,7 +42,9 @@ button:focus-visible{outline:2px solid var(--resp);outline-offset:2px}
 .status{font-size:14px;color:var(--muted)}
 .camrow{display:flex;gap:12px;align-items:center;margin-top:10px}
 .camtext{display:flex;flex-direction:column;gap:2px;min-width:0}
-.preview{width:64px;height:48px;border-radius:6px;object-fit:cover;background:var(--sunk);flex:none}
+.preview{width:88px;height:66px;border-radius:6px;object-fit:cover;background:var(--sunk);flex:none}
+.howto{margin:12px 0 0;padding:10px 14px 10px 32px;background:var(--sunk);border-radius:10px;font-size:13.5px;display:flex;flex-direction:column;gap:2px}
+.howto strong{font-weight:500}
 .caminfo{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
 .readouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
 @media (max-width:620px){.readouts{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -94,6 +96,13 @@ footer p{margin:0 0 6px;max-width:62em}
         <span class="caminfo" id="camInfo"></span>
       </div>
     </div>
+    <ol class="howto">
+      <li><strong>只用一根手指</strong>:食指指腹蓋住主鏡頭,不用整個手掌。</li>
+      <li><strong>看預覽畫面</strong>:整片變成均勻的紅色才是蓋對了;還看得到影像就換一顆鏡頭。</li>
+      <li><strong>輕輕放上去</strong>:用力壓會把血擠掉,脈搏就消失了。</li>
+      <li><strong>需要光線穿過手指</strong>:iPhone 網頁無法開閃光燈,請在明亮處量,或請旁人用手電筒從指甲那側照。閃光燈不用蓋。</li>
+      <li><strong>手機平放、手不要動</strong>,正常呼吸約 40 秒。手太冰時先搓熱。</li>
+    </ol>
     <div class="bar" aria-hidden="true"><i id="progress"></i></div>
     <div class="readouts">
       <div class="ro rr"><div class="k">呼吸速率</div><div><span class="v" id="rr">--</span><span class="u">次/分</span></div><div class="sub" id="rrParts">基線 -- · 振幅 -- · 間隔 --</div></div>
@@ -151,11 +160,17 @@ const QLABEL = { good: '良好', fair: '尚可', poor: '不穩定' };
 
 function analyse() {
   if (samples.length < 10) return;
-  const ts = samples.map(s => s[0]), vs = samples.map(s => s[1]);
+  const ts = samples.map(s => s[0]);
   const span = ts[ts.length - 1] - ts[0];
   $('progress').style.width = Math.min(100, span / 32 * 100) + '%';
   if (span < 12) { $('status').textContent = `收集訊號中… ${span.toFixed(0)} / 32 秒`; return; }
-  const r = PPGDSP.estimate(ts, vs, { fs: 30, win: 32 });
+  // Camera samples carry red and green; keep whichever channel gives the cleaner pulse.
+  let r = null;
+  for (let ch = 1; ch < samples[0].length; ch++) {
+    const res = PPGDSP.estimate(ts, samples.map(s => s[ch]), { fs: 30, win: 32 });
+    if (res) res.channel = ch;
+    r = PPGDSP.better(r, res);
+  }
   if (!r) return;
   $('hr').textContent = Number.isFinite(r.hr) ? Math.round(r.hr) : '--';
   $('beats').textContent = `偵測到 ${r.beats.length} 次心跳`;
@@ -163,7 +178,11 @@ function analyse() {
   $('rr').textContent = ready ? fmt(r.rr) : '--';
   $('rrParts').textContent = `基線 ${fmt(r.rrs.riiv)} · 振幅 ${fmt(r.rrs.riav)} · 間隔 ${fmt(r.rrs.rifv)}`;
   $('quality').textContent = QLABEL[r.quality]; $('quality').className = 'v q-' + r.quality;
-  $('qnote').textContent = ready && !Number.isFinite(r.rr) ? '三種估算不一致,請保持手指不動' : '三種估算一致時才顯示呼吸速率';
+  const chName = samples[0].length > 2 ? (r.channel === 1 ? '紅色通道' : '綠色通道') + ' · ' : '';
+  $('qnote').textContent = chName + (
+    r.reason === 'pulse' ? '脈搏波形不清楚:手指輕放、別用力壓,保持不動'
+    : ready && r.reason === 'disagree' ? '三種呼吸估算不一致,請保持不動、正常呼吸'
+    : '三種估算一致時才顯示呼吸速率');
   $('status').textContent = ready ? '持續更新中(每秒)' : `收集訊號中… ${span.toFixed(0)} / 32 秒`;
   const tail = r.band.slice(-r.fs * 10);
   trace($('cvPleth'), tail, css('--pleth'));
@@ -238,29 +257,38 @@ $('btnCam').addEventListener('click', async () => {
 
   const cv = document.createElement('canvas'); cv.width = 40; cv.height = 30;
   const ctx = cv.getContext('2d', { willReadFrequently: true });
-  let frames = 0, fpsStart = performance.now(), fps = 0;
-  const grab = () => {
+  let frames = 0, fpsStart = performance.now(), fps = 0, lastFrame = performance.now();
+  // One sample per new camera frame (requestVideoFrameCallback); a 120 Hz screen would otherwise
+  // read every frame twice. Falls back to animation frames if the callback never fires.
+  const useRvfc = typeof video.requestVideoFrameCallback === 'function';
+  let fallback = !useRvfc;
+  const grab = (_, meta) => {
     if (running !== 'cam') return;
+    lastFrame = performance.now();
     if (video.readyState >= 2) {
       ctx.drawImage(video, 0, 0, 40, 30);
       const d = ctx.getImageData(0, 0, 40, 30).data; let r = 0, g = 0;
       for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; }
       r /= d.length / 4; g /= d.length / 4;
-      const now = performance.now(), t = now / 1000;
+      const now = performance.now();
+      const t = (meta && meta.captureTime ? meta.captureTime : now) / 1000;
       if (++frames, now - fpsStart > 1000) { fps = frames * 1000 / (now - fpsStart); frames = 0; fpsStart = now; }
-      $('camInfo').textContent = `紅 ${r.toFixed(0)} · 綠 ${g.toFixed(0)} · ${fps.toFixed(0)} fps${torch ? ' · 閃光燈開' : ''}`;
+      const sat = r > 250 ? ' · 紅色過亮' : '';
+      $('camInfo').textContent = `紅 ${r.toFixed(0)} · 綠 ${g.toFixed(0)} · ${fps.toFixed(0)} fps${torch ? ' · 閃光燈開' : ''}${sat}`;
       // A fingertip over the lens turns the frame red: red clearly above green.
       if (r < 25 || r < 1.3 * g) {
         if (samples.length) resetReadouts();
-        say('沒有偵測到手指。' + hint);
+        say('沒有偵測到手指:預覽畫面要整片變紅才算蓋好。' + hint);
       } else {
-        samples.push([t, -r]);                 // more blood absorbs more light: invert
+        samples.push([t, -r, -g]);             // more blood absorbs more light: invert
         samples = samples.filter(x => x[0] > t - 40);
       }
     }
-    requestAnimationFrame(grab);
+    schedule();
   };
-  requestAnimationFrame(grab);
+  const schedule = () => fallback ? requestAnimationFrame(grab) : video.requestVideoFrameCallback(grab);
+  schedule();
+  if (useRvfc) setTimeout(() => { if (running === 'cam' && performance.now() - lastFrame > 900) { fallback = true; schedule(); } }, 1500);
 });
 $('btnStop').addEventListener('click', () => stop('已停止。'));
 
