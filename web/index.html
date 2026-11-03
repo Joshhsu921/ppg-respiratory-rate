@@ -11,13 +11,17 @@
 /* Layout: one instrument panel (big readouts + two trace strips) above the dataset replay */
 :root{
   --bg:#f2f5f4; --panel:#ffffff; --sunk:#e6ecea; --ink:#13211f; --muted:#5a6b68; --line:#d3ddda;
-  --pleth:#0f7a6c; --resp:#2f5fa8; --ref:#b4532a; --warn:#b4532a; --good:#2d7a3a;
+  --pleth:#0f7a6c; --resp:#2f5fa8; --ref:#b4532a; --warn:#b4532a; --good:#2d7a3a; --band:rgba(47,95,168,.08);
+  /* one hue per measurement context: rest, waking, bedtime, exercise, work, stress, unwell, other */
+  --ctx-0:#2f5fa8; --ctx-1:#0f7a6c; --ctx-2:#6a4fa3; --ctx-3:#c0532a; --ctx-4:#8a6d1a; --ctx-5:#b03a6a; --ctx-6:#8b2f2f; --ctx-7:#5a6b68;
   --f-display:"Noto Serif TC",serif; --f-body:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
 @media (prefers-color-scheme: dark){
   :root{ --bg:#0c1413; --panel:#131d1b; --sunk:#1a2624; --ink:#e2ecea; --muted:#90a3a0; --line:#263533;
-    --pleth:#4cc3b0; --resp:#7aa7ec; --ref:#ee9466; --warn:#ee9466; --good:#6cc07a; color-scheme:dark; }
+    --pleth:#4cc3b0; --resp:#7aa7ec; --ref:#ee9466; --warn:#ee9466; --good:#6cc07a; --band:rgba(122,167,236,.1);
+    --ctx-0:#7aa7ec; --ctx-1:#4cc3b0; --ctx-2:#a991e0; --ctx-3:#ee9466; --ctx-4:#d6b75a; --ctx-5:#e47ba6; --ctx-6:#e07a7a; --ctx-7:#90a3a0;
+    color-scheme:dark; }
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65}
@@ -45,6 +49,39 @@ button:focus-visible{outline:2px solid var(--resp);outline-offset:2px}
 .preview{width:88px;height:66px;border-radius:6px;object-fit:cover;background:var(--sunk);flex:none}
 .howto{margin:12px 0 0;padding:10px 14px 10px 32px;background:var(--sunk);border-radius:10px;font-size:13.5px;display:flex;flex-direction:column;gap:2px}
 .howto strong{font-weight:500}
+.savebar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-top:4px}
+.saveform{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.saveform fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;min-width:0}
+.saveform legend{font-size:13px;color:var(--muted);padding:0;margin-bottom:6px}
+.snap{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:14px;align-items:center}
+.snap b{font-family:var(--f-mono);font-size:18px;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:13.5px}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;margin-right:6px;vertical-align:1px}
+.chip .dot{margin-right:0}
+.ring{display:inline-block;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--muted);margin-right:6px;vertical-align:1px;box-sizing:border-box}
+.field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
+.field input{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;max-width:100%}
+.field input[type=number]{width:110px;font-family:var(--f-mono)}
+.need{font-size:13px;color:var(--warn)}
+.badge{display:inline-block;font-size:11.5px;border:1px dashed var(--muted);color:var(--muted);border-radius:4px;padding:0 6px}
+.loghead{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between}
+.loghead h2 span{font-family:var(--f-mono);font-size:13px;color:var(--muted);font-weight:400;margin-left:8px}
+.ro .v.sm{font-size:30px}
+.confirm{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;background:var(--sunk);border-radius:8px;padding:10px 12px;font-size:14px;margin-top:10px}
+.ctxt{width:100%;border-collapse:collapse;font-size:14px;margin-top:14px;font-variant-numeric:tabular-nums}
+.ctxt th{font-size:12px;font-weight:500;color:var(--muted);text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}
+.ctxt td{padding:6px 8px;border-bottom:1px solid var(--line)}
+.ctxt td:nth-child(n+2),.ctxt th:nth-child(n+2){text-align:right;font-family:var(--f-mono)}
+.tablewrap{overflow-x:auto}
+.entries{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column}
+.entry{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+.e-main,.e-vals{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;grid-column:1}
+.e-time{font-family:var(--f-mono);color:var(--muted);font-size:13px}
+.e-vals{color:var(--muted)} .e-vals b{color:var(--ink);font-family:var(--f-mono);font-weight:500}
+.e-note{grid-column:1;font-size:13px;color:var(--muted)}
+.e-del{grid-column:2;grid-row:1 / span 3;align-self:center;background:transparent;color:var(--muted);border-color:var(--line);padding:4px 10px;font-size:12.5px}
 .caminfo{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
 .readouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
 @media (max-width:620px){.readouts{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -109,9 +146,53 @@ footer p{margin:0 0 6px;max-width:62em}
       <div class="ro hr"><div class="k">心跳</div><div><span class="v" id="hr">--</span><span class="u">次/分</span></div><div class="sub" id="beats">偵測到 0 次心跳</div></div>
       <div class="ro"><div class="k">訊號品質</div><div class="v" id="quality" style="font-size:28px">--</div><div class="sub" id="qnote">三種估算一致時才顯示呼吸速率</div></div>
     </div>
+    <div class="savebar">
+      <button type="button" id="btnSave" disabled>儲存這次量測</button>
+      <span class="status" id="saveHint" aria-live="polite">量到呼吸速率後就能儲存,並記下當時的情境。</span>
+    </div>
+    <form class="saveform" id="saveForm" hidden>
+      <div class="snap" id="snap"></div>
+      <fieldset><legend>當時的情境(必選)</legend><div class="chips" id="ctxChips"></div></fieldset>
+      <fieldset><legend>姿勢</legend><div class="chips" id="postureChips"></div></fieldset>
+      <fieldset>
+        <legend>自己數一次(選填,用來檢查 App 準不準)</legend>
+        <div class="savebar"><button type="button" class="ghost" id="btnTimer">開始數 30 秒</button><span class="status" id="timerText" aria-live="polite"></span></div>
+        <label class="field" for="manualCount">30 秒內呼吸了幾次(一吸一吐算一次)<input type="number" id="manualCount" min="1" max="40" inputmode="numeric"></label>
+      </fieldset>
+      <label class="field" for="note">備註(選填)<input type="text" id="note" maxlength="100" placeholder="例如:爬完三樓、剛喝咖啡"></label>
+      <div class="savebar">
+        <button type="submit" id="btnDoSave">儲存</button>
+        <button type="button" class="ghost" id="btnCancelSave">取消</button>
+        <span class="need" id="saveNeed">請先選擇情境</span>
+      </div>
+    </form>
     <div class="strip"><span>脈搏波形(最近 10 秒)</span><canvas id="cvPleth"></canvas></div>
     <div class="strip"><span>呼吸波形(由基線飄移萃取,最近 32 秒)</span><canvas id="cvResp"></canvas></div>
     <p class="note">手機鏡頭量測需要 HTTPS。iPhone 的網頁無法開啟閃光燈,請在明亮處量測;若從 LINE 等 App 開啟,請改用 Safari 或 Chrome。這是技術展示,不是醫療量測。</p>
+  </section>
+
+  <section class="panel" aria-labelledby="logTitle">
+    <div class="loghead">
+      <h2 id="logTitle">我的紀錄<span id="logCount"></span></h2>
+      <div class="controls">
+        <button type="button" class="ghost" id="btnExport">匯出 CSV</button>
+        <button type="button" class="ghost" id="btnExample">載入範例</button>
+        <button type="button" class="ghost" id="btnClearAll">清除全部</button>
+      </div>
+    </div>
+    <p class="status" style="margin:4px 0 0">紀錄只存在這台裝置的瀏覽器裡,不會上傳。清除瀏覽器的網站資料會一併刪除。</p>
+    <div class="confirm" id="clearConfirm" hidden>
+      <span>確定刪除全部 <b id="clearN"></b> 筆紀錄?刪除後無法復原。</span>
+      <button type="button" id="btnClearYes">刪除</button>
+      <button type="button" class="ghost" id="btnClearNo">取消</button>
+    </div>
+    <p class="status" id="logEmpty" style="margin:14px 0 0">還沒有紀錄。完成一次量測後按「儲存這次量測」,或按「載入範例」看看紀錄的樣子。</p>
+    <div id="logBody" hidden>
+      <div class="readouts" id="tiles"></div>
+      <div class="strip"><span>呼吸速率趨勢(色帶為休息時常見範圍 12–20 次/分;空心圈是自己數的)</span><canvas id="cvTrend" style="height:190px"></canvas><div class="legend" id="trendLegend"></div></div>
+      <div class="tablewrap" id="ctxTable"></div>
+      <ol class="entries" id="entries"></ol>
+    </div>
   </section>
 
   <section class="panel" aria-labelledby="replayTitle">
@@ -134,10 +215,12 @@ footer p{margin:0 0 6px;max-width:62em}
 </div>
 
 <script src="ppg-dsp.js"></script>
+<script src="log.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 let samples = [], running = null, timer = null, stream = null;
+let recent = [], lastKind = null;   // last ~10 s of valid estimates, used when saving
 
 function sizeCanvas(cv) {
   const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
@@ -176,6 +259,11 @@ function analyse() {
   $('beats').textContent = `偵測到 ${r.beats.length} 次心跳`;
   const ready = span >= 30;
   $('rr').textContent = ready ? fmt(r.rr) : '--';
+  if (ready && Number.isFinite(r.rr)) {
+    recent.push({ rr: r.rr, hr: r.hr, quality: r.quality, channel: r.channel === 2 ? 'green' : r.channel === 1 ? 'red' : null, parts: r.rrs });
+    recent = recent.slice(-10);
+    $('btnSave').disabled = false;
+  }
   $('rrParts').textContent = `基線 ${fmt(r.rrs.riiv)} · 振幅 ${fmt(r.rrs.riav)} · 間隔 ${fmt(r.rrs.rifv)}`;
   $('quality').textContent = QLABEL[r.quality]; $('quality').className = 'v q-' + r.quality;
   const chName = samples[0].length > 2 ? (r.channel === 1 ? '紅色通道' : '綠色通道') + ' · ' : '';
@@ -190,7 +278,7 @@ function analyse() {
 }
 
 function resetReadouts() {
-  samples = [];
+  samples = []; recent = []; $('btnSave').disabled = true;
   for (const id of ['rr', 'hr', 'quality']) $(id).textContent = '--';
   $('progress').style.width = '0%';
 }
@@ -203,7 +291,7 @@ function stop(msg) {
 }
 // Callers stop() the previous run first; start() must not touch the stream it is given.
 function start(kind) {
-  resetReadouts(); running = kind;
+  resetReadouts(); running = kind; lastKind = kind; $('saveHint').textContent = '量到呼吸速率後就能儲存,並記下當時的情境。';
   $('btnStop').hidden = false; $('btnCam').disabled = true; $('btnSim').disabled = true;
   timer = setInterval(analyse, 1000);
 }
@@ -329,6 +417,22 @@ fetch('data/demo.json').then(r => r.ok ? r.json() : Promise.reject()).then(d => 
   drawReplay();
 }).catch(() => { $('replayStatus').textContent = '尚未產生示範資料。執行 python scripts/export_demo.py 後重新整理。'; });
 addEventListener('resize', () => demo && drawReplay());
+
+// Saved value = median of the last ~10 s of estimates, steadier than a single update.
+const med = a => { const s = [...a].sort((p, q) => p - q), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
+PPGLog.init({
+  getSnapshot: () => {
+    if (!recent.length) return null;
+    const last = recent[recent.length - 1];
+    const counts = {}; for (const x of recent) counts[x.quality] = (counts[x.quality] || 0) + 1;
+    return {
+      rr: med(recent.map(x => x.rr)), hr: med(recent.map(x => x.hr).filter(Number.isFinite)),
+      quality: Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0],
+      channel: last.channel, source: lastKind === 'cam' ? 'camera' : 'sim',
+      parts: Object.fromEntries(Object.entries(last.parts).map(([k, v]) => [k, Number.isFinite(v) ? +v.toFixed(1) : null])),
+    };
+  },
+});
 </script>
 </body>
 </html>
