@@ -4,6 +4,10 @@
 
 **線上展示:** <https://joshhsu921.github.io/ppg-respiratory-rate/>(手機開啟可用鏡頭量測)
 
+<img src="web/qr.svg" width="140" alt="掃描開啟線上展示">
+
+QR Code 由 `python scripts/make_qr.py` 產生;網址改變時重新執行即可。
+
 > 作品集技術展示,未經臨床驗證,不可用於診斷或病人監測。
 
 ## 為什麼做這個
