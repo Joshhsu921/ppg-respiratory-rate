@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>PPG 呼吸速率</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600&display=swap">
+<style>
+/* Layout: one instrument panel (big readouts + two trace strips) above the dataset replay */
+:root{
+  --bg:#f2f5f4; --panel:#ffffff; --sunk:#e6ecea; --ink:#13211f; --muted:#5a6b68; --line:#d3ddda;
+  --pleth:#0f7a6c; --resp:#2f5fa8; --ref:#b4532a; --warn:#b4532a; --good:#2d7a3a;
+  --f-display:"Noto Serif TC",serif; --f-body:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#0c1413; --panel:#131d1b; --sunk:#1a2624; --ink:#e2ecea; --muted:#90a3a0; --line:#263533;
+    --pleth:#4cc3b0; --resp:#7aa7ec; --ref:#ee9466; --warn:#ee9466; --good:#6cc07a; color-scheme:dark; }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65}
+.wrap{max-width:1040px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+h1{font-family:var(--f-display);font-size:clamp(26px,4vw,34px);margin:0;line-height:1.25}
+h2{font-family:var(--f-display);font-size:20px;margin:0 0 4px}
+.lede{color:var(--muted);margin:6px 0 20px;max-width:44em}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:18px}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+button{font:inherit;font-size:14px;border-radius:8px;padding:8px 16px;cursor:pointer;border:1px solid var(--pleth);background:var(--pleth);color:var(--panel)}
+button.ghost{background:transparent;color:var(--pleth)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible{outline:2px solid var(--resp);outline-offset:2px}
+.status{font-size:14px;color:var(--muted)}
+.readouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+@media (max-width:620px){.readouts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.ro{background:var(--sunk);border-radius:10px;padding:12px 14px}
+.ro .k{font-size:12px;letter-spacing:.12em;color:var(--muted)}
+.ro .v{font-family:var(--f-mono);font-size:40px;line-height:1.1;font-variant-numeric:tabular-nums}
+.ro .u{font-size:13px;color:var(--muted);margin-left:4px}
+.ro.rr .v{color:var(--resp)} .ro.hr .v{color:var(--pleth)}
+.ro .sub{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.q-good{color:var(--good)} .q-fair{color:var(--warn)} .q-poor{color:var(--warn)}
+.strip{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.strip span{font-size:12px;color:var(--muted);letter-spacing:.06em}
+canvas{width:100%;height:110px;background:var(--sunk);border-radius:8px;display:block}
+.bar{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;width:0;background:var(--resp);transition:width .3s}
+.note{font-size:13px;color:var(--muted);margin:10px 0 0}
+select{font:inherit;font-size:14px;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink)}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-top:6px;flex-wrap:wrap}
+.legend b{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:6px}
+footer{font-size:12.5px;color:var(--muted)}
+footer p{margin:0 0 6px;max-width:62em}
+@media (prefers-reduced-motion: reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PPG 呼吸速率</h1>
+  <p class="lede">從光體積變化描記訊號(PPG)的三種呼吸調變——基線飄移、脈搏振幅、心跳間隔——估算每分鐘呼吸次數。可以用手機鏡頭即時量測,或重播公開資料集的病人紀錄。</p>
+
+  <section class="panel" aria-labelledby="liveTitle">
+    <h2 id="liveTitle">即時量測</h2>
+    <div class="controls">
+      <button type="button" id="btnCam">用手機鏡頭量測</button>
+      <button type="button" class="ghost" id="btnSim">播放模擬訊號(15 次/分)</button>
+      <button type="button" class="ghost" id="btnStop" hidden>停止</button>
+      <span class="status" id="status" aria-live="polite">將指尖輕輕蓋住後鏡頭與閃光燈,保持不動約 40 秒。</span>
+    </div>
+    <div class="bar" aria-hidden="true"><i id="progress"></i></div>
+    <div class="readouts">
+      <div class="ro rr"><div class="k">呼吸速率</div><div><span class="v" id="rr">--</span><span class="u">次/分</span></div><div class="sub" id="rrParts">基線 -- · 振幅 -- · 間隔 --</div></div>
+      <div class="ro hr"><div class="k">心跳</div><div><span class="v" id="hr">--</span><span class="u">次/分</span></div><div class="sub" id="beats">偵測到 0 次心跳</div></div>
+      <div class="ro"><div class="k">訊號品質</div><div class="v" id="quality" style="font-size:28px">--</div><div class="sub" id="qnote">三種估算一致時才顯示呼吸速率</div></div>
+    </div>
+    <div class="strip"><span>脈搏波形(最近 10 秒)</span><canvas id="cvPleth"></canvas></div>
+    <div class="strip"><span>呼吸波形(由基線飄移萃取,最近 32 秒)</span><canvas id="cvResp"></canvas></div>
+    <p class="note">手機鏡頭量測需要 HTTPS 或 localhost。iOS 的網頁通常無法開啟閃光燈,請在明亮處量測。這是技術展示,不是醫療量測。</p>
+  </section>
+
+  <section class="panel" aria-labelledby="replayTitle">
+    <h2 id="replayTitle">資料集重播</h2>
+    <p class="status" id="replayStatus" style="margin:0 0 10px">載入 BIDMC 示範資料中…</p>
+    <div class="controls" id="replayControls" hidden>
+      <label for="subject" class="status">病人紀錄</label>
+      <select id="subject"></select>
+      <span class="status" id="replayMetrics"></span>
+    </div>
+    <div class="strip" id="replayStrip" hidden><span>參考值與估算值(每個 32 秒視窗)</span><canvas id="cvReplay" style="height:200px"></canvas>
+      <div class="legend"><span><b style="background:var(--ref)"></b>參考值(人工標註呼吸)</span><span><b style="background:var(--resp)"></b>訊號處理融合</span><span><b style="background:var(--pleth)"></b>LightGBM</span></div>
+    </div>
+  </section>
+
+  <footer>
+    <p>資料:BIDMC PPG and Respiration Dataset(PhysioNet,ODC-BY 1.0)。Pimentel et al., IEEE TBME 2017;Goldberger et al., Circulation 2000。</p>
+    <p>方法:Karlen et al., IEEE TBME 2013(smart fusion)。本頁為作品集技術展示,未經臨床驗證,不可用於診斷或監測。</p>
+  </footer>
+</div>
+
+<script src="ppg-dsp.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let samples = [], running = null, timer = null, stream = null;
+
+function sizeCanvas(cv) {
+  const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  const ctx = cv.getContext('2d'); ctx.setTransform(d, 0, 0, d, 0, 0);
+  return [ctx, r.width, r.height];
+}
+function trace(cv, ys, color) {
+  const [ctx, w, h] = sizeCanvas(cv);
+  ctx.clearRect(0, 0, w, h);
+  if (!ys || ys.length < 2) return;
+  let lo = Infinity, hi = -Infinity; for (const v of ys) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  const pad = 8, span = hi - lo || 1;
+  ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.beginPath();
+  ys.forEach((v, i) => { const x = i / (ys.length - 1) * w, y = h - pad - (v - lo) / span * (h - 2 * pad); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+  ctx.stroke();
+}
+const fmt = v => Number.isFinite(v) ? v.toFixed(1) : '--';
+const QLABEL = { good: '良好', fair: '尚可', poor: '不穩定' };
+
+function analyse() {
+  if (samples.length < 10) return;
+  const ts = samples.map(s => s[0]), vs = samples.map(s => s[1]);
+  const span = ts[ts.length - 1] - ts[0];
+  $('progress').style.width = Math.min(100, span / 32 * 100) + '%';
+  if (span < 12) { $('status').textContent = `收集訊號中… ${span.toFixed(0)} / 32 秒`; return; }
+  const r = PPGDSP.estimate(ts, vs, { fs: 30, win: 32 });
+  if (!r) return;
+  $('hr').textContent = Number.isFinite(r.hr) ? Math.round(r.hr) : '--';
+  $('beats').textContent = `偵測到 ${r.beats.length} 次心跳`;
+  const ready = span >= 30;
+  $('rr').textContent = ready ? fmt(r.rr) : '--';
+  $('rrParts').textContent = `基線 ${fmt(r.rrs.riiv)} · 振幅 ${fmt(r.rrs.riav)} · 間隔 ${fmt(r.rrs.rifv)}`;
+  $('quality').textContent = QLABEL[r.quality]; $('quality').className = 'v q-' + r.quality;
+  $('qnote').textContent = ready && !Number.isFinite(r.rr) ? '三種估算不一致,請保持手指不動' : '三種估算一致時才顯示呼吸速率';
+  $('status').textContent = ready ? '持續更新中(每秒)' : `收集訊號中… ${span.toFixed(0)} / 32 秒`;
+  const tail = r.band.slice(-r.fs * 10);
+  trace($('cvPleth'), tail, css('--pleth'));
+  trace($('cvResp'), r.resp, css('--resp'));
+}
+
+function resetReadouts() {
+  samples = [];
+  for (const id of ['rr', 'hr', 'quality']) $(id).textContent = '--';
+  $('progress').style.width = '0%';
+}
+function stop(msg) {
+  running = null; clearInterval(timer); timer = null;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  $('btnStop').hidden = true; $('btnCam').disabled = false; $('btnSim').disabled = false;
+  if (msg) $('status').textContent = msg;
+}
+function start(kind) {
+  stop(); resetReadouts(); running = kind;
+  $('btnStop').hidden = false; $('btnCam').disabled = true; $('btnSim').disabled = true;
+  timer = setInterval(analyse, 1000);
+}
+
+$('btnSim').addEventListener('click', () => {
+  start('sim');
+  const sig = PPGDSP.synthetic(600, 30, 72, 15, 0.05);
+  const t0 = performance.now() / 1000; let i = 0;
+  (function feed() {
+    if (running !== 'sim') return;
+    const now = performance.now() / 1000 - t0;
+    while (i < sig.ts.length && sig.ts[i] <= now) { samples.push([sig.ts[i], sig.vs[i]]); i++; }
+    samples = samples.filter(s => s[0] > now - 40);
+    requestAnimationFrame(feed);
+  })();
+});
+
+$('btnCam').addEventListener('click', async () => {
+  if (!navigator.mediaDevices?.getUserMedia) { $('status').textContent = '這個瀏覽器無法使用鏡頭。請改用手機的 Chrome 或 Safari,並以 HTTPS 開啟。'; return; }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 160 }, height: { ideal: 120 }, frameRate: { ideal: 30 } }, audio: false });
+  } catch (e) { $('status').textContent = '無法開啟鏡頭:請允許鏡頭權限後再試一次。'; return; }
+  start('cam');
+  const track = stream.getVideoTracks()[0];
+  try { await track.applyConstraints({ advanced: [{ torch: true }] }); } catch (_) {}
+  const video = document.createElement('video');
+  video.playsInline = true; video.muted = true; video.srcObject = stream; await video.play();
+  const cv = document.createElement('canvas'); cv.width = 40; cv.height = 30;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const grab = () => {
+    if (running !== 'cam') return;
+    ctx.drawImage(video, 0, 0, 40, 30);
+    const d = ctx.getImageData(0, 0, 40, 30).data; let r = 0, g = 0;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; }
+    r /= d.length / 4; g /= d.length / 4;
+    const t = performance.now() / 1000;
+    if (r < 60 || r < 1.5 * g) {             // no finger: the image is not dominated by red
+      if (samples.length) resetReadouts();
+      $('status').textContent = '沒有偵測到手指,請蓋住鏡頭與閃光燈。';
+    } else {
+      samples.push([t, -r]);                 // more blood absorbs more light: invert
+      samples = samples.filter(s => s[0] > t - 40);
+    }
+    video.requestVideoFrameCallback ? video.requestVideoFrameCallback(grab) : requestAnimationFrame(grab);
+  };
+  grab();
+});
+$('btnStop').addEventListener('click', () => stop('已停止。'));
+
+/* ---- dataset replay (data/demo.json from scripts/export_demo.py) ---- */
+let demo = null;
+function drawReplay() {
+  const rec = demo.records.find(r => r.subject === $('subject').value);
+  const [ctx, w, h] = sizeCanvas($('cvReplay'));
+  ctx.clearRect(0, 0, w, h);
+  const all = rec.windows.flatMap(x => [x.ref, x.fusion, x.lgbm]).filter(Number.isFinite);
+  const lo = Math.floor(Math.min(...all) - 2), hi = Math.ceil(Math.max(...all) + 2);
+  const X = t => 36 + t / rec.duration * (w - 46), Y = v => h - 24 - (v - lo) / (hi - lo) * (h - 36);
+  ctx.fillStyle = css('--muted'); ctx.font = '11px ' + css('--f-mono');
+  ctx.strokeStyle = css('--line'); ctx.lineWidth = 1;
+  for (let v = Math.ceil(lo / 5) * 5; v <= hi; v += 5) {
+    ctx.beginPath(); ctx.moveTo(36, Y(v)); ctx.lineTo(w - 10, Y(v)); ctx.stroke(); ctx.fillText(v, 8, Y(v) + 4);
+  }
+  for (let t = 0; t <= rec.duration; t += 60) ctx.fillText(`${t / 60}m`, X(t) - 8, h - 6);
+  const line = (key, color, dash) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.setLineDash(dash || []); ctx.beginPath(); let on = false;
+    for (const x of rec.windows) {
+      const v = x[key], px = X(x.t + 16);
+      if (!Number.isFinite(v)) { on = false; continue; }
+      on ? ctx.lineTo(px, Y(v)) : ctx.moveTo(px, Y(v)); on = true;
+    }
+    ctx.stroke(); ctx.setLineDash([]);
+  };
+  line('ref', css('--ref')); line('fusion', css('--resp'), [5, 4]); line('lgbm', css('--pleth'));
+  const m = k => { const e = rec.windows.filter(x => Number.isFinite(x[k])).map(x => Math.abs(x[k] - x.ref)); return e.length ? (e.reduce((a, b) => a + b, 0) / e.length).toFixed(2) : '--'; };
+  $('replayMetrics').textContent = `平均誤差:融合 ${m('fusion')} · LightGBM ${m('lgbm')}(次/分)`;
+}
+fetch('data/demo.json').then(r => r.ok ? r.json() : Promise.reject()).then(d => {
+  demo = d;
+  $('subject').append(...d.records.map(r => new Option(`BIDMC ${r.subject}`, r.subject)));
+  $('subject').addEventListener('change', drawReplay);
+  $('replayStatus').textContent = `資料來自 ${d.n_subjects} 位 ICU 病人;LightGBM 為依病人分組交叉驗證的預測(該病人未參與訓練)。`;
+  $('replayControls').hidden = false; $('replayStrip').hidden = false;
+  drawReplay();
+}).catch(() => { $('replayStatus').textContent = '尚未產生示範資料。執行 python scripts/export_demo.py 後重新整理。'; });
+addEventListener('resize', () => demo && drawReplay());
+</script>
+</body>
+</html>
