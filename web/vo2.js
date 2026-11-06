@@ -149,10 +149,14 @@
       return;
     }
     const age = +profile.age;
+    if (age < 18) {   // intended for adults only: see the page header and README
+      body.replaceChildren(el('p', { class: 'notice warn' }, '本工具適用 18 歲以上成人。兒童的呼吸、心跳範圍和體能常模都不同,所以不計算 VO2 max。'));
+      return;
+    }
     const row = profile.sex === 'f' || profile.sex === 'm' ? normRow(profile.sex, age) : null;
     const est = estimates(profile, latest?.hr);
     const warnings = [];
-    if (model && (age < 18 || age > model.train.age_max)) warnings.push(`估算模型的訓練資料年齡為 ${Math.round(model.train.age_min)}–${model.train.age_max} 歲,你的年齡在範圍外。`);
+    if (model && age > model.train.age_max) warnings.push(`估算模型的訓練資料年齡為 ${Math.round(model.train.age_min)}–${model.train.age_max} 歲,你的年齡在範圍外。`);
     if (age >= 40) warnings.push('模型以運動員訓練,年齡幾乎沒有影響;一般人每 10 年約下降 10%,所以估算值可能明顯偏高。');
     if (profile.sex === 'x') warnings.push('基本資料模型和常模都需要性別,所以只顯示心跳比值公式,不顯示等級。');
     if (!row && profile.sex !== 'x') warnings.push('常模只涵蓋 20–79 歲,無法顯示等級。');

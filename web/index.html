@@ -33,6 +33,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);fo
 h1{font-family:var(--f-display);font-size:clamp(26px,4vw,34px);margin:0;line-height:1.25}
 h2{font-family:var(--f-display);font-size:20px;margin:0 0 4px}
 .lede{color:var(--muted);margin:6px 0 0;max-width:44em}
+.scope{margin:8px 0 0;font-size:13.5px;color:var(--ink);background:var(--sunk);border-radius:8px;padding:6px 10px;display:inline-block}
+.scope strong{font-weight:500}
+.notice{margin:12px 0 0;font-size:14px;background:var(--sunk);border-left:3px solid var(--warn);border-radius:6px;padding:8px 12px}
 .head{display:flex;gap:20px;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
 .head-text{min-width:0}
 /* QR stays dark-on-white in both themes so every scanner can read it */
@@ -128,6 +131,7 @@ footer p{margin:0 0 6px;max-width:62em}
     <div class="head-text">
       <h1>PPG 呼吸速率</h1>
       <p class="lede">從光體積變化描記訊號(PPG)的三種呼吸調變——基線飄移、脈搏振幅、心跳間隔——估算每分鐘呼吸次數。可以用手機鏡頭即時量測,或重播公開資料集的病人紀錄。</p>
+      <p class="scope"><strong>適用 18 歲以上成人</strong>,在安靜、不動的狀態下量測。不適用兒童、心律不整或運動中。</p>
     </div>
     <figure class="qr">
       <img src="qr.svg" width="132" height="132" alt="開啟本頁的 QR Code">
@@ -252,7 +256,7 @@ footer p{margin:0 0 6px;max-width:62em}
 
   <footer>
     <p>資料:BIDMC PPG and Respiration Dataset(PhysioNet,ODC-BY 1.0)。Pimentel et al., IEEE TBME 2017;Goldberger et al., Circulation 2000。</p>
-    <p>方法:Karlen et al., IEEE TBME 2013(smart fusion)。本頁為作品集技術展示,未經臨床驗證,不可用於診斷或監測。</p>
+    <p>方法:Karlen et al., IEEE TBME 2013(smart fusion)。本頁為作品集技術展示,未經臨床驗證,不可用於診斷或監測。預期使用者為 18 歲以上成人:驗證資料以成人為主,兒童在外部資料集上的誤差範圍約為成人的 3 倍,且演算法只搜尋每分鐘 4–42 次的呼吸。</p>
   </footer>
 </div>
 
