@@ -53,6 +53,12 @@ def main() -> None:
     df["lightgbm"] = lightgbm_oof(df)
     methods = {**CLASSICAL, "LightGBM (all windows)": "lightgbm"}
 
+    # Safety-first mode: trust the classical RIIV estimate when two RIIV readings agree on
+    # slow breathing (see scripts/slow_breathing.py for how this rule was chosen).
+    slow = (df["riiv_spec"] < 12) & (df["riiv_count"] < 12)
+    df["hybrid_safety"] = np.where(slow, df["riiv_spec"], df["lightgbm"])
+    methods["Safety-first hybrid"] = "hybrid_safety"
+
     # Fair comparison: LightGBM restricted to the windows smart fusion accepts.
     accepted = np.isfinite(df["fusion_spec"])
     df["lightgbm_accepted"] = np.where(accepted, df["lightgbm"], np.nan)
@@ -71,7 +77,9 @@ def main() -> None:
     df[["subject", "start_s", "ref_rr", *methods.values()]].to_csv(args.out / "predictions.csv", index=False)
 
     fig, axes = plt.subplots(2, 3, figsize=(15, 9), sharey=True)
-    for ax, (name, col) in zip(axes.flat, [(n, c) for n, c in methods.items() if n != "LightGBM (all windows)"]):
+    shown = ["RIIV (spectral)", "Smart fusion (spectral)", "Smart fusion (counting)",
+             "LightGBM (all windows)", "Safety-first hybrid", "LightGBM (fusion-accepted windows)"]
+    for ax, (name, col) in zip(axes.flat, [(n, methods[n]) for n in shown]):
         bland_altman(ax, df["ref_rr"], df[col], name)
     fig.tight_layout()
     fig.savefig(args.out / "bland_altman.png", dpi=130)
