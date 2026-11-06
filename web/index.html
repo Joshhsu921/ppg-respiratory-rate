@@ -102,6 +102,11 @@ button:focus-visible{outline:2px solid var(--resp);outline-offset:2px}
 .mk{flex:none;margin-top:5px;display:inline-block}
 .mk-demo{width:18px;height:6px;border-radius:3px;background:var(--resp)}
 .mk-uth{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid var(--pleth)}
+.checks{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:14px}
+.checks li{padding-left:24px;position:relative}
+.checks li::before{position:absolute;left:0;top:0;font-weight:700}
+.checks .ok{color:var(--muted)}.checks .ok::before{content:'✓';color:var(--good,#2e7d32)}
+.checks .todo::before{content:'!';color:var(--warn)}
 .warnlist{margin:12px 0 0;padding:8px 12px 8px 30px;background:var(--sunk);border-radius:8px;font-size:13px;color:var(--ink)}
 .trendrow{display:flex;gap:14px;align-items:center;margin-top:12px;background:var(--sunk);border-radius:10px;padding:10px 14px;flex-wrap:wrap}
 .trendrow .k{font-size:12px;letter-spacing:.08em;color:var(--muted)}

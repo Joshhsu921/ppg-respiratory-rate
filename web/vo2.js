@@ -136,6 +136,26 @@
       svg);
   }
 
+  // What each estimate still needs, so a missing estimate never just silently disappears.
+  function checklist(profile, entries) {
+    const items = [];
+    if (!profile) items.push([false, '基本資料模型:需要年齡、性別、身高、體重,請填寫上方的基本資料。']);
+    else if (profile.sex === 'x') items.push([false, '基本資料模型:性別選了「不透露」,這個模型需要性別,所以不顯示。可按「修改基本資料」更改。']);
+    else items.push([true, '基本資料模型:基本資料已填寫。']);
+    if (entries.some(RESTING)) items.push([true, '心跳比值公式:已有休息時的心跳。']);
+    else {
+      const rest = entries.filter(e => e.context === '休息');
+      const hint = '儲存量測時,情境選「休息」,姿勢選「坐著」或「躺著」。';
+      items.push([false, '心跳比值公式:' + (
+        !entries.length ? '還沒有儲存任何量測。量完後按「儲存這次量測」,' + hint
+        : !rest.length ? (entries.length === 1 ? '目前唯一一筆紀錄的情境不是「休息」。' : `目前 ${entries.length} 筆紀錄的情境都不是「休息」。`) + hint
+        : rest.some(e => e.posture === '坐著' || e.posture === '躺著') ? '休息時的紀錄沒有量到心跳,請再量一次。'
+        : `有 ${rest.length} 筆「休息」紀錄,但姿勢沒有選「坐著」或「躺著」(站著時心跳較高,不適合當靜止心跳)。` + hint)]);
+    }
+    if (items.every(([ok]) => ok)) return null;
+    return el('ul', { class: 'checks' }, items.map(([ok, t]) => el('li', { class: ok ? 'ok' : 'todo' }, t)));
+  }
+
   function render(entries) {
     lastEntries = entries || lastEntries;
     const body = $('vo2Body');
@@ -145,7 +165,7 @@
     $('vo2Profile').hidden = !!profile && $('vo2Profile').dataset.editing !== '1';
     if (!profile) { profileForm(null); }
     if (!profile) {
-      body.replaceChildren(el('p', { class: 'status' }, '先填寫上方的基本資料。資料只存在這台裝置上。'));
+      body.replaceChildren(checklist(null, lastEntries), el('p', { class: 'status' }, '基本資料只存在這台裝置上。'));
       return;
     }
     const age = +profile.age;
@@ -158,7 +178,7 @@
     const warnings = [];
     if (model && age > model.train.age_max) warnings.push(`估算模型的訓練資料年齡為 ${Math.round(model.train.age_min)}–${model.train.age_max} 歲,你的年齡在範圍外。`);
     if (age >= 40) warnings.push('模型以運動員訓練,年齡幾乎沒有影響;一般人每 10 年約下降 10%,所以估算值可能明顯偏高。');
-    if (profile.sex === 'x') warnings.push('基本資料模型和常模都需要性別,所以只顯示心跳比值公式,不顯示等級。');
+    if (profile.sex === 'x') warnings.push('常模分男女,所以不顯示等級。');
     if (!row && profile.sex !== 'x') warnings.push('常模只涵蓋 20–79 歲,無法顯示等級。');
 
     const lines = [];
@@ -179,14 +199,13 @@
         el('div', null,
           el('div', null, el('b', null, '心跳比值公式:'), ` 約 ${f1(est.uth)} mL/kg/min` + (pu ? `,約第 ${Math.round(pu.p)} 百分位(${level(pu.p)})` : '')),
           el('div', { class: 'sub' }, `用 ${when(latest.t)} 休息${latest.posture}時的心跳 ${latest.hr} 次/分${latest.example ? '(範例資料)' : latest.source === 'sim' ? '(模擬訊號)' : ''},最大心跳以 208 − 0.7 × 年齡估算。文獻公式(Uth 2004),本專案沒有資料可以驗證它的誤差,所以不顯示範圍。`))));
-    } else {
-      lines.push(el('p', { class: 'status' }, '需要一筆情境為「休息」、姿勢為「坐著」或「躺著」的量測,才能用你的靜止心跳估算。'));
     }
 
     body.replaceChildren(...[
       row ? el('div', { class: 'strip' }, el('span', null, `同年齡、同性別常模(FRIEND,${profile.sex === 'f' ? '女性' : '男性'} ${Math.floor(age / 10) * 10}–${Math.floor(age / 10) * 10 + 9} 歲)`),
         el('canvas', { id: 'cvVo2', style: 'height:96px' })) : null,
-      el('div', { class: 'ests' }, lines),
+      checklist(profile, lastEntries),
+      lines.length ? el('div', { class: 'ests' }, lines) : null,
       warnings.length ? el('ul', { class: 'warnlist' }, warnings.map(w => el('li', null, w))) : null,
       trend(lastEntries),
       el('p', { class: 'note' }, '實驗性功能:誤差範圍很大,不能取代運動心肺測試,也不能作為運動處方依據。長期追蹤自己的靜止心跳變化,通常比單次 VO2 max 數字更有參考價值。'),
