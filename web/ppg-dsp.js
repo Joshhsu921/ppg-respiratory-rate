@@ -111,6 +111,19 @@
     return bpm;
   }
 
+  // Do odd and even counted beats differ in height (amp: weaker/stronger mean) or in the
+  // interval that follows them (spacing: relative difference)? Null with too few beats:
+  // on BIDMC 10 s windows (8-15 beats) over half of the flags were false alarms.
+  const MIN_PARITY_BEATS = 16;
+  function parityStats(band, pk) {
+    if (pk.length < MIN_PARITY_BEATS) return null;
+    const h = pk.map(i => band[i]);
+    const ev = mean(h.filter((_, i) => i % 2 === 0)), od = mean(h.filter((_, i) => i % 2 === 1));
+    const iv = pk.slice(1).map((p, i) => p - pk[i]);
+    const ie = mean(iv.filter((_, i) => i % 2 === 0)), io = mean(iv.filter((_, i) => i % 2 === 1));
+    return { amp: Math.min(ev, od) / Math.max(ev, od), spacing: Math.abs(ie - io) / ((ie + io) / 2) };
+  }
+
   function seriesToResp(times, values, t0, t1) {
     if (times.length < 8) return null;
     const a = Math.max(t0, times[0]), b = Math.min(t1, times[times.length - 1]);
@@ -128,8 +141,18 @@
     const low = lowpass(x, 4, fs);
     // Spacing beats at >= 60 % of the spectral beat period stops the dicrotic notch counting as a beat.
     const hrSpec = pulseSpectrumHR(band, fs);
-    const minDist = Math.max(Math.round(fs * 60 / 180), Math.round(0.6 * fs * 60 / hrSpec));
-    const pk = findPeaks(band, minDist, 0);
+    const detect = hrGuess => findPeaks(band, Math.max(Math.round(fs * 60 / 180), Math.round(0.6 * fs * 60 / hrGuess)), 0);
+    let pk = detect(hrSpec);
+    // A strong dicrotic wave can win the spectrum at twice the pulse rate; then counted "beats"
+    // alternate tall/short, or short-long in spacing. Short-long spacing means the in-between
+    // peaks are dicrotic waves: halve. Tall/short with even spacing could be genuinely weak beats,
+    // so report both rates instead of guessing.
+    let doubling = null;
+    const par = parityStats(band, pk);
+    if (par && (par.amp < 0.6 || par.spacing > 0.3)) {
+      if (par.spacing > 0.2) { pk = detect(hrSpec / 2); doubling = 'dicrotic'; }
+      else doubling = 'ambiguous';
+    }
     const peaks = pk.slice(1), troughs = [];
     for (let i = 1; i < pk.length; i++) {
       let m = pk[i - 1];
@@ -146,8 +169,24 @@
     // Robust beat-interval variability and the share of implausible intervals
     const rcv = 1.4826 * median(ibi.map(v => Math.abs(v - medIbi))) / medIbi;
     const outlierFrac = ibi.filter(v => Math.abs(v - medIbi) > 0.3 * medIbi).length / ibi.length;
-    const hrAgree = Math.abs(out.hr - hrSpec) <= 8;
-    out.sqi = { rcv, outlierFrac, hrAgree };
+    const hrAgree = Math.abs(out.hr - (doubling === 'dicrotic' ? hrSpec / 2 : hrSpec)) <= 8;
+    // The opposite case: a smaller peak midway between most counted beats may be a beat too weak
+    // to count, so the rate may really be double. A dicrotic wave sits earlier, ~30-45 % of the cycle.
+    let midway = 0;
+    for (let k = 1; k < pk.length; k++) {
+      const a = pk[k - 1], b = pk[k];
+      let m = -1;
+      for (let j = a + 1; j < b - 1; j++) if (band[j] > 0 && band[j] > band[j - 1] && band[j] >= band[j + 1] && (m < 0 || band[j] > band[m])) m = j;
+      if (m < 0) continue;
+      const pos = (m - a) / (b - a);
+      if (pos >= 0.42 && pos <= 0.58 && band[m] >= 0.08 * Math.min(band[a], band[b])) midway++;
+    }
+    const alternation = pk.length > 1 ? midway / (pk.length - 1) : 0;
+    out.doubling = doubling;
+    out.alternans = doubling === 'ambiguous'
+      || (doubling !== 'dicrotic' && pk.length >= MIN_PARITY_BEATS && alternation >= 0.6);
+    if (out.alternans) out.hrAlt = doubling === 'ambiguous' ? out.hr / 2 : 2 * out.hr;
+    out.sqi = { rcv, outlierFrac, hrAgree, alternation, parity: par };
 
     const fmKeep = ibi.map((v, i) => [(bt[i] + bt[i + 1]) / 2, v]).filter(([, v]) => Math.abs(v - medIbi) <= 0.3 * medIbi);
     const series = {
@@ -163,9 +202,10 @@
     const est = Object.values(out.rrs);
     if (est.every(Number.isFinite) && std(est) <= 4) out.rr = mean(est);  // smart fusion
     // quality describes the pulse signal; whether the three RR estimates agree is reported separately
-    out.quality = rcv < 0.1 && outlierFrac < 0.15 && hrAgree ? 'good'
+    out.quality = rcv < 0.1 && outlierFrac < 0.15 && hrAgree && !out.alternans ? 'good'
       : rcv < 0.2 && outlierFrac < 0.3 ? 'fair' : 'poor';
-    out.reason = !hrAgree || outlierFrac >= 0.3 ? 'pulse' : !Number.isFinite(out.rr) ? 'disagree' : null;
+    out.reason = out.alternans ? 'alternans'
+      : !hrAgree || outlierFrac >= 0.3 ? 'pulse' : !Number.isFinite(out.rr) ? 'disagree' : null;
     return out;
   }
 

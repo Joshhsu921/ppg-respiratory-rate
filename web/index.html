@@ -269,7 +269,8 @@ function analyse() {
   $('quality').textContent = QLABEL[r.quality]; $('quality').className = 'v q-' + r.quality;
   const chName = samples[0].length > 2 ? (r.channel === 1 ? '紅色通道' : '綠色通道') + ' · ' : '';
   $('qnote').textContent = chName + (
-    r.reason === 'pulse' ? '脈搏波形不清楚:手指輕放、別用力壓,保持不動'
+    r.reason === 'alternans' ? `脈搏一強一弱交替:心跳可能是 ${Math.round(r.hr)} 或 ${Math.round(r.hrAlt)},可能有心律不整,建議用其他設備確認`
+    : r.reason === 'pulse' ? '脈搏波形不清楚:手指輕放、別用力壓,保持不動'
     : ready && r.reason === 'disagree' ? '三種呼吸估算不一致,請保持不動、正常呼吸'
     : '三種估算一致時才顯示呼吸速率');
   $('status').textContent = ready ? '持續更新中(每秒)' : `收集訊號中… ${span.toFixed(0)} / 32 秒`;

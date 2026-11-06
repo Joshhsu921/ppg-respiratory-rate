@@ -1,6 +1,7 @@
 /* Run the deployed browser algorithm (web/ppg-dsp.js) on BIDMC PPG, resampled to 30 Hz like a phone camera.
    Usage: node scripts/hr_web_eval.js [csvDir] [out.csv]
-   Writes subject,start_s,win_s,web_hr,web_quality,web_rr for 32 s and 10 s windows. */
+   Writes per-window web estimates (heart rate, quality, respiratory rate, strong-weak alternation flag)
+   for 32 s and 10 s windows. */
 const fs = require('fs');
 const path = require('path');
 const D = require('../web/ppg-dsp.js');
@@ -19,7 +20,7 @@ const out = process.argv[3] || 'results/hr_web_predictions.csv';
 const WINDOWS = [[32, 8], [10, 4]];   // [length, step] in seconds
 const FS = 30;
 
-const rows = ['subject,start_s,win_s,web_hr,web_quality,web_rr'];
+const rows = ['subject,start_s,win_s,web_hr,web_quality,web_rr,web_alternans,web_alternation'];
 const subjects = fs.readdirSync(csvDir).filter(f => /^bidmc_\d+_Signals\.csv$/.test(f)).map(f => f.split('_')[1]).sort();
 for (const s of subjects) {
   const lines = fs.readFileSync(path.join(csvDir, `bidmc_${s}_Signals.csv`), 'utf8').trim().split(/\r?\n/);
@@ -41,7 +42,8 @@ for (const s of subjects) {
       const r = D.estimate(tx.slice(a, b), Array.from(x.slice(a, b)), { fs: FS, win });
       const hr = r && Number.isFinite(r.hr) ? r.hr.toFixed(2) : '';
       const rr = r && Number.isFinite(r.rr) ? r.rr.toFixed(2) : '';
-      rows.push([s, start, win, hr, r ? r.quality : '', rr].join(','));
+      const alt = r && r.sqi && Number.isFinite(r.sqi.alternation) ? r.sqi.alternation.toFixed(2) : '';
+      rows.push([s, start, win, hr, r ? r.quality : '', rr, r && r.alternans ? 1 : 0, alt].join(','));
     }
   }
   process.stdout.write(`subject ${s} done\n`);
