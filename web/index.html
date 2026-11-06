@@ -35,6 +35,13 @@ h2{font-family:var(--f-display);font-size:20px;margin:0 0 4px}
 .lede{color:var(--muted);margin:6px 0 0;max-width:44em}
 .scope{margin:8px 0 0;font-size:13.5px;color:var(--ink);background:var(--sunk);border-radius:8px;padding:6px 10px;display:inline-block}
 .scope strong{font-weight:500}
+.valt{width:100%;border-collapse:collapse;font-size:13.5px;min-width:560px}
+.valt th{text-align:left;font-size:12px;font-weight:500;color:var(--muted);padding:6px 8px;border-bottom:1px solid var(--line)}
+.valt td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.valt td:first-child{font-weight:500;white-space:nowrap}
+.valt strong{font-weight:500}
+.vs{display:inline-block;font-size:12px;border-radius:999px;padding:1px 9px;white-space:nowrap;border:1px solid currentColor}
+.vs-ok{color:var(--good)} .vs-part{color:var(--resp)} .vs-bad{color:var(--warn)}
 .notice{margin:12px 0 0;font-size:14px;background:var(--sunk);border-left:3px solid var(--warn);border-radius:6px;padding:8px 12px}
 .head{display:flex;gap:20px;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
 .head-text{min-width:0}
@@ -131,7 +138,7 @@ footer p{margin:0 0 6px;max-width:62em}
     <div class="head-text">
       <h1>PPG 呼吸速率</h1>
       <p class="lede">從光體積變化描記訊號(PPG)的三種呼吸調變——基線飄移、脈搏振幅、心跳間隔——估算每分鐘呼吸次數。可以用手機鏡頭即時量測,或重播公開資料集的病人紀錄。</p>
-      <p class="scope"><strong>適用 18 歲以上成人</strong>,在安靜、不動的狀態下量測。不適用兒童、心律不整或運動中。</p>
+      <p class="scope"><strong>一般成人居家健康參考(原型)</strong>:適用 18 歲以上,在安靜、不動的狀態下量測。不是醫療器材,不適用兒童、心律不整或運動中。各項數值的驗證程度不同,請見下方「驗證狀態」。</p>
     </div>
     <figure class="qr">
       <img src="qr.svg" width="132" height="132" alt="開啟本頁的 QR Code">
@@ -189,7 +196,24 @@ footer p{margin:0 0 6px;max-width:62em}
     </form>
     <div class="strip"><span>脈搏波形(最近 10 秒)</span><canvas id="cvPleth"></canvas></div>
     <div class="strip"><span>呼吸波形(由基線飄移萃取,最近 32 秒)</span><canvas id="cvResp"></canvas></div>
-    <p class="note">手機鏡頭量測需要 HTTPS。iPhone 的網頁無法開啟閃光燈,請在明亮處量測;若從 LINE 等 App 開啟,請改用 Safari 或 Chrome。這是技術展示,不是醫療量測。</p>
+    <p class="note"><strong>手機鏡頭量心跳的準確度不足</strong>:在 50 位成人的手機錄影上,只有約 4 成在 ±5 次以內,訊號品質「良好」時較可靠(詳見<a href="#validation">驗證狀態</a>)。手機鏡頭量測需要 HTTPS。iPhone 的網頁無法開啟閃光燈,請在明亮處量測;若從 LINE 等 App 開啟,請改用 Safari 或 Chrome。這是技術展示,不是醫療量測。</p>
+  </section>
+
+  <section class="panel" aria-labelledby="valTitle" id="validation">
+    <h2 id="valTitle">驗證狀態</h2>
+    <p class="status" style="margin:4px 0 10px">這個工具的目標使用者是在家用手機的一般成人,但各項數值是在不同族群、不同設備上驗證的。下表列出每項數值目前的證據。</p>
+    <div class="tablewrap">
+      <table class="valt">
+        <thead><tr><th>數值</th><th>狀態</th><th>結果</th><th>驗證資料</th></tr></thead>
+        <tbody>
+          <tr><td>呼吸速率</td><td><span class="vs vs-part">部分驗證</span></td><td>外部驗證平均誤差 1.0 次/分(成人 95% 範圍 −2.8 ~ +2.1)。<strong>一般成人、手機鏡頭都還沒有驗證。</strong></td><td>醫療級血氧機:ICU 病人 53 位(BIDMC)、手術麻醉中 42 位(CapnoBase)</td></tr>
+          <tr><td>心跳(血氧機訊號)</td><td><span class="vs vs-ok">已驗證</span></td><td>平均誤差 1.75 次/分</td><td>ICU 病人 53 位,和心電圖比對</td></tr>
+          <tr><td>心跳(手機鏡頭)</td><td><span class="vs vs-bad">準確度不足</span></td><td>指尖靜止時平均誤差 16.6 次/分,只有 37% 在 ±5 次以內,而且常常低估;訊號良好時平均誤差 5.4。</td><td>一般成人 50 位、手機指尖 10 秒錄影(BUT PPG),和心電圖比對</td></tr>
+          <tr><td>VO2 max</td><td><span class="vs vs-bad">實驗性</span></td><td>95% 範圍約 ±14 mL/kg/min;用手機量的靜止心跳是否有幫助,無法驗證。</td><td>運動員 824 位、955 次跑步機實測</td></tr>
+          <tr><td>體能等級</td><td><span class="vs vs-part">參考</span></td><td>正式發表的參考值,不需另外驗證;但估算值本身誤差大,等級僅供參考。</td><td>FRIEND 美國一般成人常模</td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section class="panel" aria-labelledby="vo2Title">
