@@ -123,6 +123,26 @@ def counting_rr(y: np.ndarray, fs: float = RESAMPLE_HZ) -> float:
     return 60.0 * fs / float(np.mean(np.diff(keep)))
 
 
+def peak_hr(beat_times: np.ndarray, start: float, end: float) -> float:
+    """Pulse rate (beats/min) from the median beat interval in [start, end)."""
+    bt = beat_times[(beat_times >= start) & (beat_times < end)]
+    if len(bt) < 4:
+        return np.nan
+    return 60.0 / float(np.median(np.diff(bt)))
+
+
+def spectral_hr(band: np.ndarray, fs: float, start: float, end: float, nfft: int = 8192) -> float:
+    """Pulse rate (beats/min) from the spectral peak of the band-passed PPG, 40–180 beats/min."""
+    seg = band[int(start * fs):int(end * fs)]
+    if len(seg) < fs * 4:
+        return np.nan
+    seg = (seg - seg.mean()) * np.hanning(len(seg))
+    f = np.fft.rfftfreq(nfft, 1.0 / fs)
+    p = np.abs(np.fft.rfft(seg, nfft)) ** 2
+    band_ok = (f >= 40 / 60) & (f <= 180 / 60)
+    return 60.0 * float(f[np.argmax(np.where(band_ok, p, -1.0))])
+
+
 def smart_fusion(estimates, max_std: float = 4.0) -> float:
     """Average the modulation estimates only when they agree (Karlen et al., 2013); else NaN."""
     arr = np.asarray(estimates, dtype=float)

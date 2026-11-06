@@ -5,3 +5,4 @@ __pycache__/
 data/raw/
 data/processed/
 results/predictions.csv
+results/hr_web_predictions.csv

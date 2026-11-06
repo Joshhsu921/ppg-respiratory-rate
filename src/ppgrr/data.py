@@ -49,7 +49,9 @@ def load_recording(csv_dir: Path, subject: str) -> Recording:
     sig = pd.read_csv(csv_dir / f"bidmc_{subject}_Signals.csv")
     sig.columns = [c.strip() for c in sig.columns]
     t = sig[_col(sig, "Time")].to_numpy(dtype=float)
-    fs = float(round(1.0 / np.median(np.diff(t))))
+    # The CSV rounds timestamps (steps of 0.008 and 0.01 s), so the median step gives 100 Hz;
+    # derive the rate from sample count over the recording span instead (125 Hz).
+    fs = float(round((len(t) - 1) / (t[-1] - t[0])))
 
     br = pd.read_csv(csv_dir / f"bidmc_{subject}_Breaths.csv")
     br.columns = [c.strip() for c in br.columns]
@@ -65,6 +67,19 @@ def load_recording(csv_dir: Path, subject: str) -> Recording:
         resp=sig[_col(sig, "RESP")].to_numpy(dtype=float),
         breaths=breaths,
     )
+
+
+def load_numerics(csv_dir: Path, subject: str) -> pd.DataFrame:
+    """1 Hz monitor values: HR (from ECG), PULSE (monitor's own PPG pulse rate), RESP, SpO2."""
+    num = pd.read_csv(Path(csv_dir) / f"bidmc_{subject}_Numerics.csv")
+    num.columns = [c.strip() for c in num.columns]
+    return num.rename(columns={_col(num, "Time"): "time"})
+
+
+def window_mean(num: pd.DataFrame, col: str, start: float, end: float) -> float:
+    v = num.loc[(num["time"] >= start) & (num["time"] < end), col].to_numpy(dtype=float)
+    v = v[np.isfinite(v)]
+    return float(v.mean()) if len(v) >= 0.8 * (end - start) else np.nan
 
 
 def reference_rr(breath_times: np.ndarray, start: float, end: float) -> float:
