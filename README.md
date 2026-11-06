@@ -6,10 +6,11 @@
 
 **重點摘要**
 
-- **呼吸速率:** 53 位 ICU 病人、依病人分組交叉驗證,LightGBM MAE **1.95 次/分**,最佳傳統方法 2.95。但 LightGBM 完全抓不到呼吸過慢(< 12 次/分);另提供「安全優先」混合模式,能抓到 77%,代價是整體 MAE 變成 2.33。
+- **呼吸速率:** 在 BIDMC(53 位 ICU 病人)依病人分組交叉驗證,LightGBM MAE **1.95 次/分**,優於傳統方法。**但在外部資料集 CapnoBase(42 位手術麻醉中的兒童與成人)排名完全反轉:** LightGBM MAE 5.60 最差,傳統的 smart fusion MAE **1.00** 最好,抓呼吸過慢與過快的敏感度都是 93%。LightGBM 學到的是 BIDMC 的呼吸速率分布,換了族群就失準;網頁因此採用 smart fusion。
+- **VO2 max:** 用 955 次實測的跑步機最大攝氧量測試驗證。只靠年齡、性別、BMI 的誤差約 ±12.5%,95% 界限 ±14 mL/kg/min;Uth 心跳公式因資料中沒有真正的靜止心跳而無法正確驗證。**決定不放進網頁。**
 - **心跳:** 以心電圖為參考,實際上線的網頁演算法在 30 Hz 訊號上 MAE **1.75 次/分**(商用監視器 0.99)。
 - **網頁:** 手機鏡頭即時量測、量測紀錄與情境統計、資料集重播;紀錄只存在裝置上。
-- **限制:** 全部驗證都用醫療級血氧機訊號,**手機鏡頭尚未和參考設備比對**,也還沒做外部資料集驗證。
+- **限制:** 全部驗證都用醫療級血氧機訊號,**手機鏡頭尚未和參考設備比對**。
 
 ```mermaid
 flowchart LR
@@ -131,6 +132,46 @@ QR Code 由 `python scripts/make_qr.py` 產生;網址改變時重新執行即可
 - 只有 10 秒的視窗誤差明顯變大,運動後心跳恢復模式若要用短視窗,需要先改善並另外驗證。
 - 這是醫療級血氧機的訊號降取樣後的結果,**不等於手機鏡頭的準確度**,手機鏡頭仍需要和參考設備同時量測比對。
 
+### 外部驗證:CapnoBase
+
+[CapnoBase IEEE TBME Respiratory Rate Benchmark](https://doi.org/10.5683/SP2/NLB8IT)(Karlen et al., 2013):42 筆手術麻醉中的 8 分鐘紀錄,28 位兒童、13 位成人、1 位年齡不詳,23 筆自主呼吸、19 筆呼吸器控制通氣,PPG 取樣率 300 Hz。參考值是**二氧化碳波形上每次吐氣開始的時間**。視窗設定和 BIDMC 相同,並排除標註為 PPG 雜訊的視窗,共 4,341 個。
+
+**沒有在 CapnoBase 上做任何調整**(原作者也要求這份資料只用來測試):LightGBM 用全部 BIDMC 視窗重新訓練、參數不變,安全優先規則的門檻也不變(`scripts/external_capnobase.py`,`results/capnobase_metrics.csv`)。
+
+| 方法 | BIDMC MAE(內部) | **CapnoBase MAE(外部)** | 涵蓋率 | 抓到過慢(< 12) | 抓到過快(> 20) |
+|---|---|---|---|---|---|
+| 基線飄移(頻譜) | 3.24 | 2.63 | 100% | 77% | 80% |
+| **Smart fusion(頻譜)** | 3.49 | **1.00** | 73% | **93%** | **93%** |
+| Smart fusion(呼吸計數) | 2.95 | 2.05 | 91% | 61% | 80% |
+| LightGBM(BIDMC 訓練) | **1.95** | 5.60 | 100% | 1% | 79% |
+| 安全優先混合 | 2.33 | 3.87 | 100% | 58% | 79% |
+
+![CapnoBase Bland-Altman](results/capnobase_bland_altman.png)
+
+- **內部驗證最好的模型,外部驗證最差。** CapnoBase 的呼吸速率分布和 BIDMC 很不一樣:中位數每分鐘 11.8 次,54% 的視窗低於 12 次,兒童最快到 43 次。LightGBM 把預測往 BIDMC 的範圍拉,平均高估 2.9 次/分。
+- **不靠訓練資料的 smart fusion 最穩定:** 三種調變一致才輸出,放棄了 27% 的視窗,換來輸出時的 MAE 1.00、95% 界限 −6.2 ~ +5.3。
+- **安全優先規則在外部沒有維持效果:** 抓到過慢的比例從 BIDMC 的 77% 降到 58%,代表那條規則確實有些針對 BIDMC。
+- **成人和兒童差很多:** smart fusion 在成人的 MAE 是 0.72,95% 界限 −2.8 ~ +2.1;兒童是 1.13,界限 −7.3 ~ +6.4。
+- 呼吸器控制通氣的 19 筆中,沒有呼吸過快的視窗,該組的過快敏感度沒有意義。
+- **結論:** 這份資料不足以讓機器學習模型推廣到不同族群。網頁採用 smart fusion,這個選擇現在有外部證據支持。若要讓模型推廣,訓練資料需要涵蓋更廣的呼吸速率與族群。
+
+### VO2 max:驗證後決定不放進網頁
+
+想法是用年齡、性別、身高體重,加上手機量到的靜止心跳,估算最大攝氧量。用 [Treadmill Maximal Exercise Tests(University of Malaga,PhysioNet)](https://physionet.org/content/treadmill-exercise-cardioresp/1.0.1/) 的實測值驗證:955 次測試、824 人(多為業餘與職業運動員,女性 15%),實測 VO2 max 為 47.0 ± 8.8 mL/kg/min。依「人」分組交叉驗證(`scripts/vo2max.py`,`results/vo2max_metrics.csv`)。
+
+| 方法 | MAE(mL/kg/min) | 誤差百分比 | 95% 一致性界限 | 相關係數 |
+|---|---|---|---|---|
+| Uth 公式:15.3 × (208 − 0.7 × 年齡) ÷ 開始時心跳 | 14.8 | 30% | −35.9 ~ +10.2 | 0.09 |
+| 線性迴歸:年齡、性別、BMI | **5.6** | **12.5%** | −14.1 ~ +14.1 | 0.58 |
+| 線性迴歸:再加開始時心跳 | 5.6 | 12.5% | −14.1 ~ +14.1 | 0.58 |
+| LightGBM:年齡、性別、BMI、開始時心跳 | 5.7 | 12.9% | −14.4 ~ +14.5 | 0.55 |
+| 只猜平均值(對照) | 7.0 | 16.1% | −17.3 ~ +17.3 | — |
+
+- **資料中沒有真正的靜止心跳。** 只有測試開始時(站立或開始走路)的心跳,中位數 89,遠高於運動員的靜止心跳。所以 Uth 公式嚴重低估,這份資料**無法正確驗證**它。只看從靜止站立開始的 193 次測試,MAE 仍有 11.5。
+- **加入心跳完全沒有改善**,加上模擬的手機心跳誤差(依 BIDMC 的心跳驗證結果)也沒有影響,原因同上。
+- **只靠基本資料,** 95% 界限是 ±14 mL/kg/min。真實值 45 的人可能被估成 31 或 59,對個人來說太不精確。
+- **決定:** 目前沒有證據顯示手機量的心跳能改善估算,只靠基本資料又太不精確,所以不放進網頁。若要重新評估,需要同時有靜止心跳和實測 VO2 max 的資料,而且受試者不能只有運動員。
+
 ### 修正紀錄
 
 - **2026-11-06:取樣率錯誤。** BIDMC CSV 的時間欄位經過四捨五入,舊版用時間差的中位數推算取樣率,得到 100 Hz(正確是 125 Hz)。參考值和估算值被同樣縮放成 0.8 倍,所以結果看似合理,實際上數字和濾波頻帶都不正確。修正後重新計算,上方都是修正後的結果;舊版「LightGBM 在呼吸過快時最差」的結論不成立,改為「呼吸過慢時最差」。已加入單元測試防止再次發生。網頁演算法直接使用時間戳,不受影響。
@@ -165,6 +206,9 @@ pytest
 python scripts/prepare_data.py
 python scripts/run_experiments.py
 python scripts/slow_breathing.py   # 呼吸過慢的改善實驗
+python scripts/download_capnobase.py && python scripts/external_capnobase.py   # 外部驗證(下載即同意 CapnoBase 使用協議)
+# 下載 https://physionet.org/content/treadmill-exercise-cardioresp/get-zip/1.0.1/ 解壓縮到 data/raw/treadmill/
+python scripts/vo2max.py
 python scripts/export_demo.py
 node scripts/hr_web_eval.js && python scripts/validate_hr.py   # 心跳驗證
 python -m http.server 8000 -d web   # 開啟 http://localhost:8000
@@ -174,7 +218,7 @@ python -m http.server 8000 -d web   # 開啟 http://localhost:8000
 
 - 資料只有 53 位病人,來自單一醫院的 ICU,而且都是靜止狀態;沒有測試走動或運動時的表現。
 - 參考值來自阻抗呼吸訊號的人工標註,本身也有誤差(見結果中兩位標註者之間的一致性)。
-- 尚未做外部驗證。下一步可以用 CapnoBase(以二氧化碳監測為參考值)作為獨立測試集,並確認安全優先規則是否仍然有效。
+- 外部驗證只有 CapnoBase 一份資料(42 筆、手術麻醉中),還不能代表一般人在家使用的情境。
 - 手機鏡頭量測的訊號品質比醫療級血氧機差,網頁展示只用來說明原理。
 
 ## 參考文獻
@@ -183,4 +227,8 @@ python -m http.server 8000 -d web   # 開啟 http://localhost:8000
 - Pimentel MAF, et al. Toward a robust estimation of respiratory rate from pulse oximeters. *IEEE Trans Biomed Eng* 2017;64:1914–23.
 - Charlton PH, et al. Breathing rate estimation from the electrocardiogram and photoplethysmogram: a review. *IEEE Rev Biomed Eng* 2018;11:2–20.
 - Schäfer A, Kratky KW. Estimation of breathing rate from respiratory sinus arrhythmia. *Ann Biomed Eng* 2008;36:476–85.
+- Karlen W, Turner M, Cooke E, Dumont GA, Ansermino JM. CapnoBase: signal database and tools to collect, share and annotate respiratory signals. Annual Meeting of the Society for Technology in Anesthesia, 2010.
+- Mongin D, García Romero J, Alvero Cruz JR. Treadmill Maximal Exercise Tests from the Exercise Physiology and Human Performance Lab of the University of Malaga (version 1.0.1). PhysioNet, 2021.
+- Uth N, et al. Estimation of VO2max from the ratio between HRmax and HRrest – the Heart Rate Ratio Method. *Eur J Appl Physiol* 2004;91:111–5.
+- Tanaka H, Monahan KD, Seals DR. Age-predicted maximal heart rate revisited. *J Am Coll Cardiol* 2001;37:153–6.
 - Goldberger AL, et al. PhysioBank, PhysioToolkit, and PhysioNet. *Circulation* 2000;101:e215–20.
