@@ -115,8 +115,8 @@
   // interval that follows them (spacing: relative difference)? Null with too few beats:
   // on BIDMC 10 s windows (8-15 beats) over half of the flags were false alarms.
   const MIN_PARITY_BEATS = 16;
-  function parityStats(band, pk) {
-    if (pk.length < MIN_PARITY_BEATS) return null;
+  function parityStats(band, pk, minBeats = MIN_PARITY_BEATS) {
+    if (pk.length < minBeats) return null;
     const h = pk.map(i => band[i]);
     const ev = mean(h.filter((_, i) => i % 2 === 0)), od = mean(h.filter((_, i) => i % 2 === 1));
     const iv = pk.slice(1).map((p, i) => p - pk[i]);
@@ -133,16 +133,32 @@
 
   /* ts: seconds, vs: raw PPG values (higher = more blood), fs: rate to resample to.
      Uses the last `win` seconds. */
-  function estimate(ts, vs, { fs = 30, win = 32, hi = 3 } = {}) {
+  // Defaults chosen on BUT PPG development subjects only (scripts/web_dsp_grid.js), among settings
+  // that keep every synthetic case in tests/web_dsp_cases.js passing. specLo: high-pass for the
+  // spectral heart rate only; it removes the exposure drift that pulled the spectral peak to half the
+  // pulse rate in phone video, while beats are still found on the lo..hi band. Bolder settings
+  // (lo 0.7, minDistFactor 0.45) did better on phone video but brought back dicrotic double counting
+  // and failed slow heart rates, so they stay off.
+  function estimate(ts, vs, { fs = 30, win = 32, hi = 3, lo = 0.5, specLo = 0.7, minDistFactor = 0.6, subharmonicCheck = false } = {}) {
     const t1 = ts[ts.length - 1], t0 = Math.max(ts[0], t1 - win);
     const x = resample(ts, vs, fs, t0, t1);
     if (x.length < fs * 8) return null;
-    const band = bandpass(x, 0.5, hi, fs);
+    const band = bandpass(x, lo, hi, fs);
     const low = lowpass(x, 4, fs);
-    // Spacing beats at >= 60 % of the spectral beat period stops the dicrotic notch counting as a beat.
-    const hrSpec = pulseSpectrumHR(band, fs);
-    const detect = hrGuess => findPeaks(band, Math.max(Math.round(fs * 60 / 180), Math.round(0.6 * fs * 60 / hrGuess)), 0);
+    // Spacing beats by a share of the spectral beat period stops the dicrotic notch counting as a beat.
+    let hrSpec = pulseSpectrumHR(specLo === lo ? band : bandpass(x, specLo, hi, fs), fs);
+    const detect = hrGuess => findPeaks(band, Math.max(Math.round(fs * 60 / 180), Math.round(minDistFactor * fs * 60 / hrGuess)), 0);
     let pk = detect(hrSpec);
+    // Short, noisy windows (phone video) can put the spectral peak at half the pulse rate, so every
+    // other beat is skipped. Try twice the rate: keep it if those peaks are even in height and spacing.
+    let subharmonic = false;
+    if (subharmonicCheck && 2 * hrSpec <= 180) {
+      const pk2 = detect(2 * hrSpec);
+      const p2 = parityStats(band, pk2, 8);
+      if (p2 && p2.amp >= 0.6 && p2.spacing <= 0.2 && pk2.length >= 1.6 * pk.length) {
+        pk = pk2; hrSpec = 2 * hrSpec; subharmonic = true;
+      }
+    }
     // A strong dicrotic wave can win the spectrum at twice the pulse rate; then counted "beats"
     // alternate tall/short, or short-long in spacing. Short-long spacing means the in-between
     // peaks are dicrotic waves: halve. Tall/short with even spacing could be genuinely weak beats,
@@ -183,6 +199,7 @@
     }
     const alternation = pk.length > 1 ? midway / (pk.length - 1) : 0;
     out.doubling = doubling;
+    out.subharmonic = subharmonic;
     out.alternans = doubling === 'ambiguous'
       || (doubling !== 'dicrotic' && pk.length >= MIN_PARITY_BEATS && alternation >= 0.6);
     if (out.alternans) out.hrAlt = doubling === 'ambiguous' ? out.hr / 2 : 2 * out.hr;

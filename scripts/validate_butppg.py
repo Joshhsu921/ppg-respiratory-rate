@@ -64,6 +64,21 @@ def main() -> None:
             subsets[f"finger, {name}"] = d[(d.site == "finger") & (d["Motion"].astype(str) == str(code))]
     rows = [{"subset": k, **summary(v)} for k, v in subsets.items() if len(v)]
     rows.append({"subset": "finger, at rest — polarity flipped (sensitivity check)", **summary(intended, "web_hr_flipped")})
+
+    # development / test split by subject (scripts/butppg_split.py); the algorithm was tuned on dev only
+    split_file = Path("data/processed/butppg_split.csv")
+    if split_file.exists():
+        split = pd.read_csv(split_file, dtype={"subject": str})
+        intended = intended.merge(split, on="subject", how="left")
+        before = Path("data/processed/butppg_web_before.csv")
+        if before.exists():
+            b = pd.read_csv(before)[["id", "web_hr"]].rename(columns={"web_hr": "web_hr_before"})
+            intended = intended.merge(b, on="id", how="left")
+        for s in ("dev", "test"):
+            part = intended[intended.split == s]
+            if "web_hr_before" in part:
+                rows.append({"subset": f"finger, at rest, {s} subjects — before tuning", **summary(part, "web_hr_before")})
+            rows.append({"subset": f"finger, at rest, {s} subjects — current", **summary(part)})
     table = pd.DataFrame(rows)
     table.to_csv(args.out / "butppg_metrics.csv", index=False)
 

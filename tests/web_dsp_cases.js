@@ -2,6 +2,7 @@
    different size and position, noise, fast and slow rates, and a weak every-second beat.
    Run: node tests/web_dsp_cases.js  (exits non-zero on failure) */
 const path = require('path');
+const EXTRA = process.env.PPG_OPTS ? JSON.parse(process.env.PPG_OPTS) : {};   // option overrides for scripts/web_dsp_grid.js
 const D = require(path.join(__dirname, '..', 'web', 'ppg-dsp.js'));
 function gen({ rr = 15, hr = 75, noise = 0.05, diaPos = 0.30, diaAmp = 0.45, weakEvery = 0, weakAmp = 0.15, seed = 7 }) {
   let s = seed; const rnd = () => { s = (s * 16807) % 2147483647; return s / 2147483647 - 0.5; };
@@ -22,7 +23,7 @@ const cases = [
 ];
 let fail = 0;
 for (const seed of [7, 11, 23]) for (const [name, o, truth] of cases) {
-  const g = gen({ ...o, seed }); const r = D.estimate(g.ts, g.vs, { fs: 30, win: 32 });
+  const g = gen({ ...o, seed }); const r = D.estimate(g.ts, g.vs, { fs: 30, win: 32, ...EXTRA });
   const ok = Math.abs(r.hr - truth) < 3 || (r.alternans && Math.abs(r.hrAlt - truth) < 3); if (!ok) fail++;
   if (seed === 7 || !ok) console.log((ok ? 'ok  ' : 'FAIL') + ` seed ${seed} ` + name.padEnd(32), 'truth', truth, 'hr', r.hr.toFixed(1), 'doubling', r.doubling, 'alt', r.alternans ? r.hrAlt.toFixed(0) : '-', 'q', r.quality, 'rr', Number.isFinite(r.rr) ? r.rr.toFixed(1) : 'NaN');
 }
