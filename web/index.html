@@ -170,7 +170,7 @@ footer p{margin:0 0 6px;max-width:62em}
     </ol>
     <div class="bar" aria-hidden="true"><i id="progress"></i></div>
     <div class="readouts">
-      <div class="ro rr"><div class="k">呼吸速率</div><div><span class="v" id="rr">--</span><span class="u">次/分</span></div><div class="sub" id="rrParts">基線 -- · 振幅 -- · 間隔 --</div></div>
+      <div class="ro rr"><div class="k">呼吸速率</div><div><span class="v" id="rr">--</span><span class="u">次/分</span><span class="u" id="rrRange"></span></div><div class="sub" id="rrParts">基線 -- · 振幅 -- · 間隔 --</div></div>
       <div class="ro hr"><div class="k">心跳</div><div><span class="v" id="hr">--</span><span class="u">次/分</span></div><div class="sub" id="beats">偵測到 0 次心跳</div></div>
       <div class="ro"><div class="k">訊號品質</div><div class="v" id="quality" style="font-size:28px">--</div><div class="sub" id="qnote">三種估算一致時才顯示呼吸速率</div></div>
     </div>
@@ -291,7 +291,8 @@ footer p{margin:0 0 6px;max-width:62em}
 const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 let samples = [], running = null, timer = null, stream = null;
-let recent = [], lastKind = null;   // last ~10 s of valid estimates, used when saving
+let recent = [], lastKind = null;   // last ~10 s of valid estimates: shown on screen and saved
+let lockedCh = null;                // colour channel, fixed once the first full window is in
 
 function sizeCanvas(cv) {
   const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1;
@@ -319,22 +320,32 @@ function analyse() {
   $('progress').style.width = Math.min(100, span / 32 * 100) + '%';
   if (span < 12) { $('status').textContent = `收集訊號中… ${span.toFixed(0)} / 32 秒`; return; }
   // Camera samples carry red and green; keep whichever channel gives the cleaner pulse.
+  // Choosing afresh every second made the readout jump when the choice flipped, so it is fixed
+  // at the first full window (reset on each new measurement).
   let r = null;
-  for (let ch = 1; ch < samples[0].length; ch++) {
+  const chans = lockedCh ? [lockedCh] : Array.from({ length: samples[0].length - 1 }, (_, i) => i + 1);
+  for (const ch of chans) {
     const res = PPGDSP.estimate(ts, samples.map(s => s[ch]), { fs: 30, win: 32 });
     if (res) res.channel = ch;
     r = PPGDSP.better(r, res);
   }
   if (!r) return;
-  $('hr').textContent = Number.isFinite(r.hr) ? Math.round(r.hr) : '--';
   $('beats').textContent = `偵測到 ${r.beats.length} 次心跳`;
-  const ready = span >= 30;
-  $('rr').textContent = ready ? fmt(r.rr) : '--';
+  const ready = span >= 30, now = ts[ts.length - 1];
+  if (ready && !lockedCh && samples[0].length > 2) lockedCh = r.channel;
+  // Each update re-estimates the last 32 s, so single values move by a breath or two; the screen
+  // shows the median of the last 10 s (the same value that is saved) and its range.
   if (ready && Number.isFinite(r.rr)) {
-    recent.push({ rr: r.rr, hr: r.hr, quality: r.quality, channel: r.channel === 2 ? 'green' : r.channel === 1 ? 'red' : null, parts: r.rrs });
-    recent = recent.slice(-10);
-    $('btnSave').disabled = false;
+    recent.push({ t: now, rr: r.rr, hr: r.hr, quality: r.quality, channel: r.channel === 2 ? 'green' : r.channel === 1 ? 'red' : null, parts: r.rrs });
   }
+  recent = recent.filter(x => x.t > now - 10);
+  const rrs = recent.map(x => x.rr), hrs = recent.map(x => x.hr).filter(Number.isFinite);
+  $('rr').textContent = ready && rrs.length ? fmt(med(rrs)) : '--';
+  const lo = Math.min(...rrs), hi = Math.max(...rrs);
+  $('rrRange').textContent = rrs.length >= 3 && hi - lo >= 0.5 ? ` (${lo.toFixed(0)}–${hi.toFixed(0)})` : '';
+  const hrShow = hrs.length ? med(hrs) : r.hr;
+  $('hr').textContent = Number.isFinite(hrShow) ? Math.round(hrShow) : '--';
+  $('btnSave').disabled = !recent.length;
   $('rrParts').textContent = `基線 ${fmt(r.rrs.riiv)} · 振幅 ${fmt(r.rrs.riav)} · 間隔 ${fmt(r.rrs.rifv)}`;
   $('quality').textContent = QLABEL[r.quality]; $('quality').className = 'v q-' + r.quality;
   const chName = samples[0].length > 2 ? (r.channel === 1 ? '紅色通道' : '綠色通道') + ' · ' : '';
@@ -343,14 +354,14 @@ function analyse() {
     : r.reason === 'pulse' ? '脈搏波形不清楚:手指輕放、別用力壓,保持不動'
     : ready && r.reason === 'disagree' ? '三種呼吸估算不一致,請保持不動、正常呼吸'
     : '三種估算一致時才顯示呼吸速率');
-  $('status').textContent = ready ? '持續更新中(每秒)' : `收集訊號中… ${span.toFixed(0)} / 32 秒`;
+  $('status').textContent = ready ? '持續更新中:顯示最近 10 秒的中位數,括號內為變動範圍' : `收集訊號中… ${span.toFixed(0)} / 32 秒`;
   const tail = r.band.slice(-r.fs * 10);
   trace($('cvPleth'), tail, css('--pleth'));
   trace($('cvResp'), r.resp, css('--resp'));
 }
 
 function resetReadouts() {
-  samples = []; recent = []; $('btnSave').disabled = true;
+  samples = []; recent = []; lockedCh = null; $('rrRange').textContent = ''; $('btnSave').disabled = true;
   for (const id of ['rr', 'hr', 'quality']) $(id).textContent = '--';
   $('progress').style.width = '0%';
 }
