@@ -7,7 +7,7 @@
 **重點摘要**
 
 - **呼吸速率:** 在 BIDMC(53 位 ICU 病人)依病人分組交叉驗證,LightGBM MAE **1.95 次/分**,優於傳統方法。**但在外部資料集 CapnoBase(42 位手術麻醉中的兒童與成人)排名完全反轉:** LightGBM MAE 5.60 最差,傳統的 smart fusion MAE **1.00** 最好,抓呼吸過慢與過快的敏感度都是 93%。LightGBM 學到的是 BIDMC 的呼吸速率分布,換了族群就失準;網頁因此採用 smart fusion。
-- **VO2 max:** 用 955 次實測的跑步機最大攝氧量測試驗證。只靠年齡、性別、BMI 的誤差約 ±12.5%,95% 界限 ±14 mL/kg/min;Uth 心跳公式因資料中沒有真正的靜止心跳而無法正確驗證。**決定不放進網頁。**
+- **VO2 max:** 用 955 次實測的跑步機最大攝氧量測試驗證。只靠年齡、性別、BMI 的誤差約 ±12.5%,95% 界限 ±14 mL/kg/min;Uth 心跳公式因資料中沒有真正的靜止心跳而無法正確驗證。網頁只以**實驗性卡片**呈現,完整顯示誤差範圍,並對照 FRIEND 常模。
 - **心跳:** 以心電圖為參考,實際上線的網頁演算法在 30 Hz 訊號上 MAE **1.75 次/分**(商用監視器 0.99)。
 - **網頁:** 手機鏡頭即時量測、量測紀錄與情境統計、資料集重播;紀錄只存在裝置上。
 - **限制:** 全部驗證都用醫療級血氧機訊號,**手機鏡頭尚未和參考設備比對**。
@@ -155,7 +155,7 @@ QR Code 由 `python scripts/make_qr.py` 產生;網址改變時重新執行即可
 - 呼吸器控制通氣的 19 筆中,沒有呼吸過快的視窗,該組的過快敏感度沒有意義。
 - **結論:** 這份資料不足以讓機器學習模型推廣到不同族群。網頁採用 smart fusion,這個選擇現在有外部證據支持。若要讓模型推廣,訓練資料需要涵蓋更廣的呼吸速率與族群。
 
-### VO2 max:驗證後決定不放進網頁
+### VO2 max:驗證結果與實驗性卡片
 
 想法是用年齡、性別、身高體重,加上手機量到的靜止心跳,估算最大攝氧量。用 [Treadmill Maximal Exercise Tests(University of Malaga,PhysioNet)](https://physionet.org/content/treadmill-exercise-cardioresp/1.0.1/) 的實測值驗證:955 次測試、824 人(多為業餘與職業運動員,女性 15%),實測 VO2 max 為 47.0 ± 8.8 mL/kg/min。依「人」分組交叉驗證(`scripts/vo2max.py`,`results/vo2max_metrics.csv`)。
 
@@ -170,7 +170,15 @@ QR Code 由 `python scripts/make_qr.py` 產生;網址改變時重新執行即可
 - **資料中沒有真正的靜止心跳。** 只有測試開始時(站立或開始走路)的心跳,中位數 89,遠高於運動員的靜止心跳。所以 Uth 公式嚴重低估,這份資料**無法正確驗證**它。只看從靜止站立開始的 193 次測試,MAE 仍有 11.5。
 - **加入心跳完全沒有改善**,加上模擬的手機心跳誤差(依 BIDMC 的心跳驗證結果)也沒有影響,原因同上。
 - **只靠基本資料,** 95% 界限是 ±14 mL/kg/min。真實值 45 的人可能被估成 31 或 59,對個人來說太不精確。
-- **決定:** 目前沒有證據顯示手機量的心跳能改善估算,只靠基本資料又太不精確,所以不放進網頁。若要重新評估,需要同時有靜止心跳和實測 VO2 max 的資料,而且受試者不能只有運動員。
+- **結論:** 目前沒有證據顯示手機量的心跳能改善估算,只靠基本資料又太不精確,所以不當成正式功能。若要正式評估,需要同時有靜止心跳和實測 VO2 max 的資料,而且受試者不能只有運動員。
+
+**網頁上的實驗性卡片**(`web/vo2.js`)把這些不確定性直接呈現出來,而不是隱藏:
+
+- 只在有基本資料(年齡、性別、身高、體重,只存在裝置上),而且有一筆「休息 + 坐著或躺著」的量測時,才用該筆心跳當作靜止心跳。
+- **兩種估算並列:** 基本資料模型(上表的線性迴歸,係數由 `scripts/vo2max.py` 匯出到 `web/data/vo2max_model.json`),顯示交叉驗證得到的 95% 範圍;以及 Uth 心跳比值公式,標示「本專案無法驗證誤差」,不顯示範圍。
+- **等級對照:** 使用 FRIEND 資料庫的跑步機實測常模(Kaminsky et al., *Mayo Clin Proc* 2015,Table 2:20–79 歲、男女分開的第 5 到 95 百分位),分成偏低(< P25)、中下、中上、良好(P75–90)、優秀(≥ P90)。卡片會標出範圍橫跨幾個等級,通常是 4–5 個。
+- **主動提醒:** 年齡 40 歲以上時,提醒模型以運動員訓練、年齡影響被低估,估算值可能偏高;選「不透露」性別時,只顯示不需要性別的心跳比值公式。
+- **靜止心跳趨勢:** 列出最近的休息時心跳變化,這比單次 VO2 max 數字更有參考價值。
 
 ### 修正紀錄
 
@@ -184,6 +192,7 @@ QR Code 由 `python scripts/make_qr.py` 產生;網址改變時重新執行即可
   - **趨勢圖與情境統計:** 依情境分色,並標出休息時常見範圍(每分鐘 12–20 次)。
   - **匯出 CSV**,可以拿回 Python 分析。
   - 紀錄只存在裝置的瀏覽器(localStorage),不會上傳。
+- **VO2 max 估計(實驗性):** 兩種估算、95% 範圍、FRIEND 同年齡同性別常模,以及靜止心跳趨勢(說明見上方「VO2 max」)。
 - **資料集重播:** BIDMC 病人紀錄的參考值、訊號處理和 LightGBM 估算比較。
 
 ## 專案結構
@@ -192,7 +201,7 @@ QR Code 由 `python scripts/make_qr.py` 產生;網址改變時重新執行即可
 src/ppgrr/      dsp.py(訊號處理)、data.py(資料載入)、features.py、evaluate.py
 scripts/        prepare_data.py → run_experiments.py → export_demo.py;心跳驗證:hr_web_eval.js → validate_hr.py
 tests/          合成訊號的單元測試(pytest);web_dsp_cases.js 測網頁演算法(node)
-web/            純前端網頁:index.html、ppg-dsp.js(dsp.py 的 JavaScript 版本)、log.js(量測紀錄)
+web/            純前端網頁:index.html、ppg-dsp.js(dsp.py 的 JavaScript 版本)、log.js(量測紀錄)、vo2.js(VO2 max 卡片)
 ```
 
 ## 重現步驟
@@ -229,6 +238,7 @@ python -m http.server 8000 -d web   # 開啟 http://localhost:8000
 - Schäfer A, Kratky KW. Estimation of breathing rate from respiratory sinus arrhythmia. *Ann Biomed Eng* 2008;36:476–85.
 - Karlen W, Turner M, Cooke E, Dumont GA, Ansermino JM. CapnoBase: signal database and tools to collect, share and annotate respiratory signals. Annual Meeting of the Society for Technology in Anesthesia, 2010.
 - Mongin D, García Romero J, Alvero Cruz JR. Treadmill Maximal Exercise Tests from the Exercise Physiology and Human Performance Lab of the University of Malaga (version 1.0.1). PhysioNet, 2021.
+- Kaminsky LA, Arena R, Myers J. Reference standards for cardiorespiratory fitness measured with cardiopulmonary exercise testing: data from the Fitness Registry and the Importance of Exercise National Database. *Mayo Clin Proc* 2015;90:1515–23.
 - Uth N, et al. Estimation of VO2max from the ratio between HRmax and HRrest – the Heart Rate Ratio Method. *Eur J Appl Physiol* 2004;91:111–5.
 - Tanaka H, Monahan KD, Seals DR. Age-predicted maximal heart rate revisited. *J Am Coll Cardiol* 2001;37:153–6.
 - Goldberger AL, et al. PhysioBank, PhysioToolkit, and PhysioNet. *Circulation* 2000;101:e215–20.

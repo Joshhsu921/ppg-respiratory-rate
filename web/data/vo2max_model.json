@@ -1,0 +1,21 @@
+{
+  "intercept": 82.2389,
+  "coef": {
+    "age": -0.0498,
+    "female": -11.6975,
+    "bmi": -1.3446
+  },
+  "residual_p2_5": -13.87,
+  "residual_p97_5": 14.46,
+  "cv_mae": 5.59,
+  "train": {
+    "tests": 955,
+    "people": 824,
+    "age_min": 10.8,
+    "age_max": 63.0,
+    "bmi_min": 17.0,
+    "bmi_max": 43.1,
+    "female_share": 0.149,
+    "population": "amateur and professional athletes (University of Malaga, PhysioNet)"
+  }
+}

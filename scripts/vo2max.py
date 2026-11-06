@@ -17,6 +17,7 @@ Usage:  python scripts/vo2max.py
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 import matplotlib
@@ -79,6 +80,25 @@ def summary(ref, est) -> dict:
     return m
 
 
+def export_web_model(d: pd.DataFrame, cv_residuals: np.ndarray, out: Path) -> None:
+    """Linear model on age, sex, BMI for the web card, with its cross-validated 95 % error range."""
+    cols = ["Age", "female", "bmi"]
+    lr = LinearRegression().fit(d[cols], d["vo2max"])
+    lo, hi = np.percentile(cv_residuals, [2.5, 97.5])
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({
+        "intercept": round(float(lr.intercept_), 4),
+        "coef": {c: round(float(v), 4) for c, v in zip(["age", "female", "bmi"], lr.coef_)},
+        "residual_p2_5": round(float(lo), 2), "residual_p97_5": round(float(hi), 2),
+        "cv_mae": round(float(np.mean(np.abs(cv_residuals))), 2),
+        "train": {"tests": int(len(d)), "people": int(d.ID.nunique()),
+                  "age_min": float(d.Age.min()), "age_max": float(d.Age.max()),
+                  "bmi_min": round(float(d.bmi.min()), 1), "bmi_max": round(float(d.bmi.max()), 1),
+                  "female_share": round(float(d.female.mean()), 3),
+                  "population": "amateur and professional athletes (University of Malaga, PhysioNet)"},
+    }, indent=2), encoding="utf-8")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw", type=Path, default=Path("data/raw/treadmill"))
@@ -125,6 +145,8 @@ def main() -> None:
         ax.set_ylabel("Estimated − measured (mL/kg/min)")
     fig.tight_layout()
     fig.savefig(args.out / "vo2max_bland_altman.png", dpi=130)
+
+    export_web_model(d, ref - est["Linear regression: age, sex, BMI"], Path("web/data/vo2max_model.json"))
 
     print(f"{len(d)} tests from {d.ID.nunique()} people; measured VO2 max {ref.mean():.1f} ± {ref.std():.1f} mL/kg/min; "
           f"start HR median {d.hr_start.median():.0f}; female {d.female.mean():.0%}")

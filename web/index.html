@@ -14,6 +14,8 @@
   --pleth:#0f7a6c; --resp:#2f5fa8; --ref:#b4532a; --warn:#b4532a; --good:#2d7a3a; --band:rgba(47,95,168,.08);
   /* one hue per measurement context: rest, waking, bedtime, exercise, work, stress, unwell, other */
   --ctx-0:#2f5fa8; --ctx-1:#0f7a6c; --ctx-2:#6a4fa3; --ctx-3:#c0532a; --ctx-4:#8a6d1a; --ctx-5:#b03a6a; --ctx-6:#8b2f2f; --ctx-7:#5a6b68;
+  /* fitness levels, low to high: one ramp so the order reads at a glance */
+  --lvl-0:#e9e1d8; --lvl-1:#e3e6dc; --lvl-2:#d5e5dc; --lvl-3:#b9d9cd; --lvl-4:#93c7b8;
   --f-display:"Noto Serif TC",serif; --f-body:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
@@ -21,9 +23,11 @@
   :root{ --bg:#0c1413; --panel:#131d1b; --sunk:#1a2624; --ink:#e2ecea; --muted:#90a3a0; --line:#263533;
     --pleth:#4cc3b0; --resp:#7aa7ec; --ref:#ee9466; --warn:#ee9466; --good:#6cc07a; --band:rgba(122,167,236,.1);
     --ctx-0:#7aa7ec; --ctx-1:#4cc3b0; --ctx-2:#a991e0; --ctx-3:#ee9466; --ctx-4:#d6b75a; --ctx-5:#e47ba6; --ctx-6:#e07a7a; --ctx-7:#90a3a0;
+    --lvl-0:#3a302a; --lvl-1:#323a33; --lvl-2:#2a4038; --lvl-3:#24524a; --lvl-4:#1f6b5c;
     color-scheme:dark; }
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}   /* class rules like .saveform{display:flex} would otherwise unhide */
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65}
 .wrap{max-width:1040px;margin:0 auto;padding:28px max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
 h1{font-family:var(--f-display);font-size:clamp(26px,4vw,34px);margin:0;line-height:1.25}
@@ -81,6 +85,18 @@ button:focus-visible{outline:2px solid var(--resp);outline-offset:2px}
 .e-time{font-family:var(--f-mono);color:var(--muted);font-size:13px}
 .e-vals{color:var(--muted)} .e-vals b{color:var(--ink);font-family:var(--f-mono);font-weight:500}
 .e-note{grid-column:1;font-size:13px;color:var(--muted)}
+.badge.exp{margin-left:10px;font-family:var(--f-body);font-size:12px;vertical-align:3px;border-style:solid;color:var(--warn);border-color:var(--warn)}
+.ests{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.est{display:flex;gap:10px;align-items:flex-start;font-size:14.5px}
+.est .sub{font-size:12.5px;color:var(--muted);margin-top:2px}
+.mk{flex:none;margin-top:5px;display:inline-block}
+.mk-demo{width:18px;height:6px;border-radius:3px;background:var(--resp)}
+.mk-uth{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid var(--pleth)}
+.warnlist{margin:12px 0 0;padding:8px 12px 8px 30px;background:var(--sunk);border-radius:8px;font-size:13px;color:var(--ink)}
+.trendrow{display:flex;gap:14px;align-items:center;margin-top:12px;background:var(--sunk);border-radius:10px;padding:10px 14px;flex-wrap:wrap}
+.trendrow .k{font-size:12px;letter-spacing:.08em;color:var(--muted)}
+.trendrow .sub{font-family:var(--f-mono);font-size:13px}
+.spark{width:140px;height:32px;color:var(--pleth);flex:none}
 .e-del{grid-column:2;grid-row:1 / span 3;align-self:center;background:transparent;color:var(--muted);border-color:var(--line);padding:4px 10px;font-size:12.5px}
 .caminfo{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
 .readouts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
@@ -172,6 +188,31 @@ footer p{margin:0 0 6px;max-width:62em}
     <p class="note">手機鏡頭量測需要 HTTPS。iPhone 的網頁無法開啟閃光燈,請在明亮處量測;若從 LINE 等 App 開啟,請改用 Safari 或 Chrome。這是技術展示,不是醫療量測。</p>
   </section>
 
+  <section class="panel" aria-labelledby="vo2Title">
+    <div class="loghead">
+      <h2 id="vo2Title">VO2 max 估計<span class="badge exp">實驗性</span></h2>
+      <button type="button" class="ghost" id="btnEditProfile">修改基本資料</button>
+    </div>
+    <p class="status" style="margin:4px 0 0">最大攝氧量代表心肺耐力。需要基本資料和一筆「休息 + 坐著或躺著」的量測,會同時顯示兩種估算和誤差範圍。</p>
+    <form class="saveform" id="vo2Profile" hidden>
+      <div class="savebar">
+        <label class="field" for="pAge">年齡<input type="number" id="pAge" min="10" max="100" inputmode="numeric"></label>
+        <label class="field" for="pHeight">身高(公分)<input type="number" id="pHeight" min="120" max="220" inputmode="decimal"></label>
+        <label class="field" for="pWeight">體重(公斤)<input type="number" id="pWeight" min="30" max="200" inputmode="decimal"></label>
+      </div>
+      <fieldset><legend>性別(常模分男女)</legend>
+        <div class="chips">
+          <button type="button" class="chip" data-sex="m" aria-pressed="false">男</button>
+          <button type="button" class="chip" data-sex="f" aria-pressed="false">女</button>
+          <button type="button" class="chip" data-sex="x" aria-pressed="false">不透露</button>
+        </div>
+      </fieldset>
+      <div class="savebar"><button type="submit">儲存基本資料</button><span class="need" id="profileMsg" aria-live="polite"></span></div>
+      <p class="status" style="margin:0">只存在這台裝置的瀏覽器裡,不會上傳。</p>
+    </form>
+    <div id="vo2Body"></div>
+  </section>
+
   <section class="panel" aria-labelledby="logTitle">
     <div class="loghead">
       <h2 id="logTitle">我的紀錄<span id="logCount"></span></h2>
@@ -217,6 +258,7 @@ footer p{margin:0 0 6px;max-width:62em}
 
 <script src="ppg-dsp.js"></script>
 <script src="log.js"></script>
+<script src="vo2.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -422,7 +464,9 @@ addEventListener('resize', () => demo && drawReplay());
 
 // Saved value = median of the last ~10 s of estimates, steadier than a single update.
 const med = a => { const s = [...a].sort((p, q) => p - q), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
+PPGVO2.init();
 PPGLog.init({
+  onEntries: entries => PPGVO2.render(entries),
   getSnapshot: () => {
     if (!recent.length) return null;
     const last = recent[recent.length - 1];

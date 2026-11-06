@@ -94,7 +94,9 @@
     const ok = store(entries);
     closeForm();
     render();
-    $('saveHint').textContent = ok ? '已儲存到「我的紀錄」。' : '無法儲存:這個瀏覽器封鎖了網站資料(例如私密瀏覽模式)。';
+    const resting = window.PPGVO2 && window.PPGVO2.isResting(entries[entries.length - 1]);
+    $('saveHint').textContent = !ok ? '無法儲存:這個瀏覽器封鎖了網站資料(例如私密瀏覽模式)。'
+      : resting ? '已儲存。這是一筆休息時的量測,下方的 VO2 max 估計已更新。' : '已儲存到「我的紀錄」。';
   }
 
   /* ---------- log section ---------- */
@@ -187,6 +189,7 @@
     entries = entries.filter(e => e.id !== id); store(entries); render();
   }
   function render() {
+    if (onChange) onChange(entries);
     const has = entries.length > 0;
     $('logEmpty').hidden = has;
     $('logBody').hidden = !has;
@@ -224,7 +227,9 @@
     store(entries); render();
   }
 
-  function init({ getSnapshot }) {
+  let onChange = null;
+  function init({ getSnapshot, onEntries }) {
+    onChange = onEntries || null;
     $('btnSave').addEventListener('click', () => { const s = getSnapshot(); if (s) openForm(s); });
     $('btnCancelSave').addEventListener('click', closeForm);
     $('btnTimer').addEventListener('click', startTimer);
